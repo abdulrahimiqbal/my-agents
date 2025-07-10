@@ -10,6 +10,11 @@ from langchain_core.tools import BaseTool
 
 from .calculator import get_calculator_tools
 from .web_search import get_web_search_tools
+from .physics_calculator import get_physics_calculator_tools
+from .physics_constants import get_physics_constants_tools
+from .physics_research import get_physics_research_tools
+from .unit_converter import get_unit_converter_tools
+from .hypothesis_tools import get_hypothesis_tools
 
 
 def get_basic_tools() -> List[BaseTool]:
@@ -28,5 +33,10 @@ def get_basic_tools() -> List[BaseTool]:
 __all__ = [
     "get_basic_tools",
     "get_calculator_tools", 
-    "get_web_search_tools"
+    "get_web_search_tools",
+    "get_physics_calculator_tools",
+    "get_physics_constants_tools",
+    "get_physics_research_tools",
+    "get_unit_converter_tools",
+    "get_hypothesis_tools"
 ] 

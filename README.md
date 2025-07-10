@@ -1,6 +1,19 @@
 # My Agents Project
 
-A production-ready, independent project for building sophisticated AI agents using LangChain and LangGraph. This project builds upon the solid foundations from LangChain Academy modules while providing a clean, extensible architecture for real-world agent applications.
+A production-ready, independent project for building sophisticated AI agents using LangChain and LangGraph. This project features both traditional single-agent systems and cutting-edge multi-agent collaboration frameworks, building upon the solid foundations from LangChain Academy modules.
+
+## 🌟 Featured Systems
+
+### 🔬 Single-Agent PhysicsGPT
+Traditional physics expert agent with comprehensive problem-solving capabilities.
+
+### 🤖 Collaborative PhysicsGPT (NEW!)
+Multi-agent physics research system featuring:
+- **Physics Expert Agent**: Rigorous scientific analysis and validation
+- **Hypothesis Generator Agent**: Creative idea generation and research gap identification  
+- **Supervisor Agent**: Orchestrates collaboration between agents
+- **Multiple Collaboration Modes**: Research, debate, brainstorm, and teaching modes
+- **Advanced Session Management**: Persistent context and synthesis capabilities
 
 ## 🏗️ Architecture
 
@@ -33,43 +46,75 @@ This project references and builds upon concepts from:
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.8+
 - LangChain/LangGraph
 - OpenAI API key (or other LLM provider)
 
-### Installation
+### Option 1: Easy Launcher (Recommended)
+```bash
+# Clone or copy this project folder
+cd my-agents-project
 
-1. Clone or copy this project folder
-2. Install dependencies:
-   ```bash
-   cd my-agents-project
-   pip install -r requirements.txt
-   ```
+# Install dependencies and set up the system
+pip install -r requirements.txt
+python setup_collaborative.py
 
-3. Set up environment variables:
-   ```bash
-   cp .env.example .env
-   # Edit .env with your API keys
-   ```
+# Launch with interactive menu
+python run_physics_app.py
+```
 
-4. Run the setup script:
-   ```bash
-   python scripts/setup.py
-   ```
+### Option 2: Direct Launch
+```bash
+# Install dependencies
+pip install -r requirements.txt
 
-### Basic Usage
+# Set up environment variables
+cp .env.example .env
+# Edit .env file with your OpenAI API key
 
+# Choose your experience:
+# Single-agent PhysicsGPT
+streamlit run streamlit_app.py
+
+# Multi-agent Collaborative PhysicsGPT (NEW!)
+streamlit run streamlit_collaborative.py
+
+# Or try the collaborative demo
+python demo_collaborative_physics.py
+```
+
+### Basic Usage Examples
+
+#### Single-Agent System
 ```python
-from src.agents import ChatAgent
-from src.memory import MemoryStore
+from src.agents import PhysicsExpertAgent
 
-# Initialize agent with memory
-memory = MemoryStore()
-agent = ChatAgent(memory=memory)
+# Initialize physics expert
+agent = PhysicsExpertAgent(difficulty_level="undergraduate")
 
-# Chat with the agent
-response = agent.chat("Hello! Can you help me with a task?")
+# Solve a physics problem
+response = agent.run("Explain quantum entanglement")
 print(response)
+```
+
+#### Collaborative System
+```python
+from src.agents import CollaborativePhysicsSystem
+
+# Initialize collaborative system
+system = CollaborativePhysicsSystem(
+    difficulty_level="undergraduate",
+    creativity_level="high",
+    collaboration_style="balanced"
+)
+
+# Start collaborative session
+session = system.start_collaborative_session(
+    topic="quantum computing applications",
+    mode="research"
+)
+
+print(session["response"])
 ```
 
 ## 🛠️ Development

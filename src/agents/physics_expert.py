@@ -69,7 +69,14 @@ class PhysicsExpertAgent(BaseAgent):
 - Use proper physics notation and terminology
 - Provide multiple approaches when possible
 - Suggest follow-up questions or related concepts
-- Always verify answers using dimensional analysis"""
+- Always verify answers using dimensional analysis
+
+## Collaboration Guidelines:
+- **With Hypothesis Generators**: Provide rigorous analysis while encouraging creativity
+- **In Peer Review**: Give constructive feedback that maintains scientific standards
+- **In Debates**: Present evidence-based arguments respectfully
+- **In Research**: Focus on experimental validation and theoretical consistency
+- **In Teaching**: Demonstrate scientific method and critical thinking"""
 
         # Customize based on difficulty level
         level_customization = {
@@ -230,6 +237,141 @@ Provide:
 4. {"Recent developments and open questions" if include_recent else "Historical development"}
 5. Applications and technological relevance
 6. References to key papers or sources
+"""
+        
+        return self.run(prompt, thread_id=thread_id)
+    
+    def evaluate_hypothesis(self, 
+                          hypothesis: str, 
+                          context: str = "",
+                          thread_id: Optional[str] = None) -> str:
+        """Evaluate a physics hypothesis for scientific validity and feasibility.
+        
+        Args:
+            hypothesis: The hypothesis to evaluate
+            context: Additional context about the hypothesis
+            thread_id: Optional thread ID for memory
+            
+        Returns:
+            Detailed evaluation with scientific assessment
+        """
+        prompt = f"""Please evaluate this physics hypothesis: {hypothesis}
+
+{"Additional context: " + context if context else ""}
+
+As a physics expert, provide a comprehensive evaluation including:
+1. **Scientific Validity**: Is this hypothesis consistent with established physics?
+2. **Theoretical Foundation**: What theoretical framework supports or challenges this?
+3. **Experimental Testability**: How could this hypothesis be tested?
+4. **Potential Challenges**: What are the main scientific or technical obstacles?
+5. **Literature Review**: What existing research relates to this hypothesis?
+6. **Mathematical Framework**: What mathematical tools would be needed?
+7. **Feasibility Assessment**: Is this practically achievable with current technology?
+8. **Potential Impact**: What would be the significance if proven correct?
+
+Be rigorous but constructive in your analysis, and suggest improvements or refinements if needed.
+"""
+        
+        return self.run(prompt, thread_id=thread_id)
+    
+    def peer_review_analysis(self, 
+                           analysis: str, 
+                           topic: str,
+                           thread_id: Optional[str] = None) -> str:
+        """Provide peer review feedback on a physics analysis or hypothesis.
+        
+        Args:
+            analysis: The analysis to review
+            topic: The physics topic being analyzed
+            thread_id: Optional thread ID for memory
+            
+        Returns:
+            Peer review feedback with suggestions
+        """
+        prompt = f"""Please provide peer review feedback on this physics analysis about {topic}:
+
+{analysis}
+
+As a physics expert, evaluate:
+1. **Accuracy**: Are the physics principles correctly applied?
+2. **Completeness**: What important aspects might be missing?
+3. **Clarity**: Is the analysis clearly presented and well-reasoned?
+4. **Evidence**: Is the analysis supported by appropriate evidence?
+5. **Methodology**: Are the proposed methods sound and appropriate?
+6. **Assumptions**: Are any assumptions questionable or need clarification?
+7. **Alternative Perspectives**: Are there other valid viewpoints to consider?
+8. **Improvements**: What specific improvements would strengthen this analysis?
+
+Provide constructive feedback that maintains scientific rigor while encouraging innovation.
+"""
+        
+        return self.run(prompt, thread_id=thread_id)
+    
+    def collaborate_with_hypothesis_generator(self, 
+                                            hypothesis_input: str, 
+                                            topic: str,
+                                            thread_id: Optional[str] = None) -> str:
+        """Collaborate with a hypothesis generator by providing expert analysis.
+        
+        Args:
+            hypothesis_input: Input from hypothesis generator
+            topic: The topic being discussed
+            thread_id: Optional thread ID for memory
+            
+        Returns:
+            Expert response with analysis and suggestions
+        """
+        prompt = f"""A hypothesis generator has provided this creative input on {topic}:
+
+{hypothesis_input}
+
+As a physics expert, please:
+1. **Evaluate the Scientific Merit**: Which ideas have strong scientific foundation?
+2. **Identify Promising Directions**: Which hypotheses deserve further investigation?
+3. **Provide Technical Analysis**: What are the physics principles involved?
+4. **Suggest Refinements**: How could promising ideas be improved or made more precise?
+5. **Propose Experiments**: What specific experiments could test these hypotheses?
+6. **Connect to Literature**: How do these ideas relate to existing research?
+7. **Assess Feasibility**: Which ideas are most feasible with current technology?
+8. **Build on Ideas**: How can we develop the most promising concepts further?
+
+Your goal is to provide rigorous scientific analysis while encouraging creative thinking and innovation.
+"""
+        
+        return self.run(prompt, thread_id=thread_id)
+    
+    def validate_experimental_design(self, 
+                                   experiment_design: str, 
+                                   hypothesis: str,
+                                   thread_id: Optional[str] = None) -> str:
+        """Validate an experimental design for testing a physics hypothesis.
+        
+        Args:
+            experiment_design: The proposed experimental design
+            hypothesis: The hypothesis being tested
+            thread_id: Optional thread ID for memory
+            
+        Returns:
+            Validation feedback with improvements
+        """
+        prompt = f"""Please validate this experimental design for testing the hypothesis: {hypothesis}
+
+Proposed experimental design:
+{experiment_design}
+
+As a physics expert, evaluate:
+1. **Experimental Validity**: Will this experiment actually test the hypothesis?
+2. **Controls and Variables**: Are appropriate controls and variables identified?
+3. **Measurement Methods**: Are the proposed measurements accurate and precise enough?
+4. **Systematic Errors**: What sources of error should be considered?
+5. **Statistical Analysis**: Is the statistical approach appropriate?
+6. **Equipment and Resources**: Are the required resources realistic and available?
+7. **Safety Considerations**: Are there any safety concerns to address?
+8. **Alternative Approaches**: Are there better or complementary experimental methods?
+9. **Expected Results**: What results would support or refute the hypothesis?
+10. **Reproducibility**: Can this experiment be reproduced by other researchers?
+
+Provide specific suggestions for improving the experimental design while maintaining scientific rigor.
 """
         
         return self.run(prompt, thread_id=thread_id) 

@@ -213,6 +213,25 @@ def create_header():
 def create_sidebar():
     """Create the sidebar with agent configuration."""
     with st.sidebar:
+        # Navigation
+        st.markdown("## 🧭 Navigation")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔬 Single Agent", type="secondary", help="Current: Single PhysicsGPT"):
+                st.info("✅ You're using the single-agent PhysicsGPT")
+        
+        with col2:
+            if st.button("🤖 Multi-Agent", type="primary", help="New: Collaborative System"):
+                st.markdown("**🚀 New Collaborative PhysicsGPT!**")
+                st.markdown("Multiple AI agents working together:")
+                st.markdown("- 🔬 Physics Expert")
+                st.markdown("- 💡 Hypothesis Generator") 
+                st.markdown("- 🤝 Supervisor Agent")
+                st.info("**To launch:** Run `streamlit run streamlit_collaborative.py` in a new terminal")
+        
+        st.markdown("---")
+        
         st.markdown("## ⚙️ Physics Agent Settings")
         
         # Difficulty level selection
