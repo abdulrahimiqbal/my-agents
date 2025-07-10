@@ -15,14 +15,20 @@ import pandas as pd
 from datetime import datetime
 
 # Add the src directory to the path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+current_dir = os.path.dirname(os.path.abspath(__file__))
+src_path = os.path.join(current_dir, 'src')
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
 
 try:
     from agents.physics_expert import PhysicsExpertAgent
     from config.settings import Settings
-    from memory.memory_store import MemoryStore
+    from memory.stores import MemoryStore
 except ImportError as e:
     st.error(f"Error importing modules: {e}")
+    st.error(f"Current directory: {current_dir}")
+    st.error(f"Source path: {src_path}")
+    st.error(f"Python path: {sys.path[:3]}")
     st.stop()
 
 

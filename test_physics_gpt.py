@@ -34,7 +34,7 @@ def test_imports():
     
     try:
         from config.settings import Settings
-        from memory.memory_store import MemoryStore
+        from memory.stores import MemoryStore
         print("✅ Configuration and memory modules imported successfully")
     except ImportError as e:
         print(f"❌ Failed to import config/memory modules: {e}")
