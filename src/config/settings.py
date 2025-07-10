@@ -6,11 +6,11 @@ Based on LangChain Academy module patterns for configuration management.
 
 import os
 from typing import Optional
-from pydantic import BaseSettings, Field
-from pydantic_settings import BaseSettings as PydanticBaseSettings
+from pydantic import Field
+from pydantic_settings import BaseSettings
 
 
-class Settings(PydanticBaseSettings):
+class Settings(BaseSettings):
     """Application settings with environment variable support."""
     
     # LLM Configuration

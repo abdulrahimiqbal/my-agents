@@ -446,3 +446,15 @@ class MemoryStore:
             )
         
         return SqliteSaver.from_conn_string(self.db_path)
+
+
+# Global memory store instance
+_memory_store: Optional[MemoryStore] = None
+
+
+def get_memory_store() -> MemoryStore:
+    """Get or create the global memory store instance."""
+    global _memory_store
+    if _memory_store is None:
+        _memory_store = MemoryStore()
+    return _memory_store

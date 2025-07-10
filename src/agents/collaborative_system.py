@@ -49,8 +49,8 @@ class CollaborativePhysicsSystem:
             difficulty_level=self.difficulty_level,
             memory_enabled=self.memory_enabled,
             memory=self.memory_store,
-            model_name=settings.model_name,
-            temperature=settings.temperature
+            model_name=settings.default_model,
+            temperature=settings.default_temperature
         )
         
         # Initialize Hypothesis Generator Agent
@@ -60,8 +60,8 @@ class CollaborativePhysicsSystem:
             risk_tolerance="medium",
             memory_enabled=self.memory_enabled,
             memory=self.memory_store,
-            model_name=settings.model_name,
-            temperature=settings.temperature + 0.1  # Slightly higher temperature for creativity
+            model_name=settings.default_model,
+            temperature=settings.default_temperature + 0.1  # Slightly higher temperature for creativity
         )
         
         # Initialize Supervisor Agent
@@ -71,8 +71,8 @@ class CollaborativePhysicsSystem:
             collaboration_style=self.collaboration_style,
             memory_enabled=self.memory_enabled,
             memory=self.memory_store,
-            model_name=settings.model_name,
-            temperature=settings.temperature
+            model_name=settings.default_model,
+            temperature=settings.default_temperature
         )
     
     def start_collaborative_session(self, 
