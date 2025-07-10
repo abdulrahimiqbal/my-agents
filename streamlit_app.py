@@ -14,23 +14,46 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 
-# Add the src directory to the path
+# Simple path setup for Streamlit Cloud
 current_dir = os.path.dirname(os.path.abspath(__file__))
-src_path = os.path.join(current_dir, 'src')
-if src_path not in sys.path:
-    sys.path.insert(0, src_path)
+sys.path.insert(0, current_dir)
+sys.path.insert(0, os.path.join(current_dir, 'src'))
 
+# Import with fallback error handling
 try:
-    from agents.physics_expert import PhysicsExpertAgent
-    from config.settings import Settings
-    from memory.stores import MemoryStore
-except ImportError as e:
-    st.error(f"Error importing modules: {e}")
-    st.error(f"Current directory: {current_dir}")
-    st.error(f"Source path: {src_path}")
-    st.error(f"Python path: {sys.path[:3]}")
-    st.stop()
-
+    # Try direct imports first
+    import src.agents.physics_expert as physics_expert_module
+    import src.config.settings as settings_module
+    import src.memory.stores as memory_module
+    
+    PhysicsExpertAgent = physics_expert_module.PhysicsExpertAgent
+    Settings = settings_module.Settings
+    MemoryStore = memory_module.MemoryStore
+    
+except ImportError as e1:
+    try:
+        # Fallback to relative imports
+        from src.agents.physics_expert import PhysicsExpertAgent
+        from src.config.settings import Settings
+        from src.memory.stores import MemoryStore
+    except ImportError as e2:
+        try:
+            # Last resort: direct module imports
+            from agents.physics_expert import PhysicsExpertAgent
+            from config.settings import Settings
+            from memory.stores import MemoryStore
+        except ImportError as e3:
+            st.error("❌ **Import Error**: Unable to load PhysicsGPT modules")
+            st.error("**Debug Information:**")
+            st.code(f"Error 1: {e1}")
+            st.code(f"Error 2: {e2}")
+            st.code(f"Error 3: {e3}")
+            st.code(f"Current directory: {current_dir}")
+            st.code(f"Python path: {sys.path[:5]}")
+            st.code(f"Directory contents: {os.listdir(current_dir)}")
+            if os.path.exists(os.path.join(current_dir, 'src')):
+                st.code(f"Src directory contents: {os.listdir(os.path.join(current_dir, 'src'))}")
+            st.stop()
 
 # Page configuration
 st.set_page_config(
@@ -39,8 +62,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
-        'Get Help': 'https://github.com/your-repo/physics-gpt',
-        'Report a bug': "https://github.com/your-repo/physics-gpt/issues",
+        'Get Help': 'https://github.com/abdulrahimiqbal/my-agents',
+        'Report a bug': "https://github.com/abdulrahimiqbal/my-agents/issues",
         'About': "PhysicsGPT - Your AI Physics Expert powered by LangChain and OpenAI"
     }
 )
