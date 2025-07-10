@@ -15,6 +15,11 @@ from pathlib import Path
 
 from ..config import get_settings
 
+try:
+    from langgraph.checkpoint.sqlite import SqliteSaver
+except ImportError:
+    SqliteSaver = None
+
 
 class MemoryStore:
     """
@@ -425,4 +430,19 @@ class MemoryStore:
                 "summary_count": summary_stats[0] or 0,
                 "summarized_messages": summary_stats[1] or 0,
                 "total_interactions": (conv_stats[0] or 0) + (summary_stats[1] or 0)
-            } 
+            }
+    
+    def get_checkpointer(self):
+        """
+        Get a LangGraph checkpointer for this memory store.
+        
+        Returns:
+            SqliteSaver instance configured with the same database path
+        """
+        if SqliteSaver is None:
+            raise ImportError(
+                "langgraph-checkpoint-sqlite is required for checkpointer functionality. "
+                "Install it with: pip install langgraph-checkpoint-sqlite"
+            )
+        
+        return SqliteSaver.from_conn_string(self.db_path)
