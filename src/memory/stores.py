@@ -525,6 +525,86 @@ class MemoryStore:
         except Exception as e:
             print(f"❌ aget_tuple failed: {e}")
             return None
+    
+    async def aput(self, config: Dict[str, Any], checkpoint: Any, metadata: Any, new_versions: Any) -> Dict[str, Any]:
+        """
+        Async method to put checkpoint data for LangGraph checkpointer compatibility.
+        This is a compatibility method that delegates to the actual checkpointer.
+        
+        Args:
+            config: Configuration dictionary
+            checkpoint: Checkpoint data
+            metadata: Metadata
+            new_versions: New versions data
+            
+        Returns:
+            Configuration dictionary
+        """
+        try:
+            checkpointer = self.get_checkpointer()
+            if hasattr(checkpointer, 'aput'):
+                return await checkpointer.aput(config, checkpoint, metadata, new_versions)
+            else:
+                # Fallback - return config as-is
+                print(f"⚠️ aput called but not supported by checkpointer")
+                return config
+        except Exception as e:
+            print(f"❌ aput failed: {e}")
+            return config
+    
+    async def aget(self, config: Dict[str, Any]) -> Optional[Any]:
+        """
+        Async method to get checkpoint data for LangGraph checkpointer compatibility.
+        This is a compatibility method that delegates to the actual checkpointer.
+        
+        Args:
+            config: Configuration dictionary
+            
+        Returns:
+            Checkpoint data or None
+        """
+        try:
+            checkpointer = self.get_checkpointer()
+            if hasattr(checkpointer, 'aget'):
+                return await checkpointer.aget(config)
+            else:
+                # Fallback - return None
+                print(f"⚠️ aget called but not supported by checkpointer")
+                return None
+        except Exception as e:
+            print(f"❌ aget failed: {e}")
+            return None
+    
+    def alist(self, config: Dict[str, Any], *, filter: Optional[Dict[str, Any]] = None, before: Optional[Any] = None, limit: Optional[int] = None):
+        """
+        Async generator to list checkpoints for LangGraph checkpointer compatibility.
+        This is a compatibility method that delegates to the actual checkpointer.
+        
+        Args:
+            config: Configuration dictionary
+            filter: Optional filter
+            before: Optional before parameter
+            limit: Optional limit
+            
+        Yields:
+            Checkpoint data
+        """
+        try:
+            checkpointer = self.get_checkpointer()
+            if hasattr(checkpointer, 'alist'):
+                return checkpointer.alist(config, filter=filter, before=before, limit=limit)
+            else:
+                # Fallback - return empty async generator
+                async def empty_generator():
+                    return
+                    yield  # unreachable
+                return empty_generator()
+        except Exception as e:
+            print(f"❌ alist failed: {e}")
+            async def empty_generator():
+                return
+                yield  # unreachable
+            return empty_generator()
 
 
 # Global memory store instance
