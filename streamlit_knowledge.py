@@ -194,7 +194,9 @@ def initialize_knowledge_api():
                 migration_success = migrator.migrate()
                 
                 if migration_success:
-                    st.session_state.knowledge_api = KnowledgeAPI()
+                    # Use the singleton instance to ensure consistency
+                    from src.database.knowledge_api import get_knowledge_api
+                    st.session_state.knowledge_api = get_knowledge_api()
                     st.success("✅ Knowledge management system initialized!")
                 else:
                     st.error("❌ Failed to initialize knowledge management system")
@@ -215,6 +217,13 @@ def create_main_header():
         </p>
     </div>
     """, unsafe_allow_html=True)
+    
+    # Add refresh button
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        if st.button("🔄 Refresh Data", help="Reload all data from database"):
+            st.session_state.knowledge_api = None  # Force reinitialize
+            st.rerun()
 
 def display_system_metrics():
     """Display system-wide metrics."""
