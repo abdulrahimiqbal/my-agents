@@ -75,12 +75,12 @@ class KnowledgeAPI:
         session_id: Optional[str] = None
     ) -> int:
         """
-        Log an empirical event in the system.
+        Log an empirical event to the database.
         
         Args:
             source: Agent or component that generated the event
-            event_type: Type of event (calculation, hypothesis_proposed, etc.)
-            payload: Event-specific data as dictionary
+            event_type: Type of event (calculation, hypothesis_generation, etc.)
+            payload: Event data and parameters
             thread_id: Optional conversation thread ID
             session_id: Optional collaboration session ID
             
@@ -103,6 +103,44 @@ class KnowledgeAPI:
         except Exception as e:
             print(f"❌ Event logging failed: {e}")
             raise
+
+    def log_event_sync(
+        self,
+        source: str,
+        event_type: str,
+        payload: Dict[str, Any],
+        thread_id: Optional[str] = None,
+        session_id: Optional[str] = None
+    ) -> int:
+        """
+        Synchronous wrapper for event logging that can be called from sync contexts.
+        
+        Args:
+            source: Agent or component that generated the event
+            event_type: Type of event (calculation, hypothesis_generation, etc.)
+            payload: Event data and parameters
+            thread_id: Optional conversation thread ID
+            session_id: Optional collaboration session ID
+            
+        Returns:
+            Event ID
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO events (source, event_type, payload_json, thread_id, session_id)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (source, event_type, json.dumps(payload), thread_id, session_id))
+                
+                event_id = cursor.lastrowid
+                conn.commit()
+                
+                return event_id
+                
+        except Exception as e:
+            print(f"❌ Event logging failed: {e}")
+            return -1  # Return -1 to indicate failure without raising
     
     async def get_events_by_type(
         self,
@@ -239,6 +277,64 @@ class KnowledgeAPI:
         except Exception as e:
             print(f"❌ Hypothesis proposal failed: {e}")
             raise
+
+    def propose_hypothesis_sync(
+        self,
+        statement: str,
+        sympy_expr: Optional[str] = None,
+        created_by: str = "system",
+        thread_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        initial_confidence: float = 0.5,
+        domain: Optional[str] = None
+    ) -> int:
+        """
+        Synchronous wrapper for proposing a new hypothesis.
+        
+        Args:
+            statement: Natural language hypothesis statement
+            sympy_expr: Optional mathematical expression
+            created_by: Agent or user who created the hypothesis
+            thread_id: Originating conversation thread
+            session_id: Originating collaboration session
+            initial_confidence: Starting confidence score
+            domain: Physics domain (quantum, classical, etc.)
+            
+        Returns:
+            Hypothesis ID, or -1 if failed
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO hypotheses (
+                        statement, sympy_expr, confidence, created_by, 
+                        thread_id, session_id, status
+                    ) VALUES (?, ?, ?, ?, ?, ?, 'proposed')
+                """, (statement, sympy_expr, initial_confidence, created_by, thread_id, session_id))
+                
+                hypothesis_id = cursor.lastrowid
+                conn.commit()
+                
+                # Log the hypothesis proposal event synchronously
+                self.log_event_sync(
+                    source=created_by,
+                    event_type="hypothesis_proposed",
+                    payload={
+                        "hypothesis_id": hypothesis_id,
+                        "statement": statement,
+                        "confidence": initial_confidence,
+                        "domain": domain
+                    },
+                    thread_id=thread_id,
+                    session_id=session_id
+                )
+                
+                return hypothesis_id
+                
+        except Exception as e:
+            print(f"❌ Hypothesis proposal failed: {e}")
+            return -1
     
     async def update_confidence(
         self,

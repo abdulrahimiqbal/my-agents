@@ -159,7 +159,7 @@ Remember to maintain consistency with the established difficulty level and build
                         event_type = "physics_consultation"
                     
                     # Log the event
-                    asyncio.create_task(self.knowledge_api.log_event(
+                    self.knowledge_api.log_event_sync(
                         source="physics_expert",
                         event_type=event_type,
                         payload={
@@ -169,7 +169,7 @@ Remember to maintain consistency with the established difficulty level and build
                             "specialty": self.specialty,
                             "tools_used": bool(response.tool_calls) if hasattr(response, 'tool_calls') else False
                         }
-                    ))
+                    )
                 except Exception as e:
                     print(f"⚠️ Event logging failed: {e}")
             
@@ -318,9 +318,8 @@ Be rigorous but constructive in your analysis, and suggest improvements or refin
         result = self.chat(prompt, thread_id=thread_id)
         
         # Log the hypothesis evaluation event
-        import asyncio
         try:
-            asyncio.create_task(self.knowledge_api.log_event(
+            self.knowledge_api.log_event_sync(
                 source="physics_expert",
                 event_type="hypothesis_evaluation",
                 payload={
@@ -331,7 +330,7 @@ Be rigorous but constructive in your analysis, and suggest improvements or refin
                 },
                 thread_id=thread_id,
                 session_id=session_id
-            ))
+            )
         except Exception as e:
             print(f"⚠️ Hypothesis evaluation logging failed: {e}")
         

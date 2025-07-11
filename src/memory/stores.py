@@ -437,7 +437,7 @@ class MemoryStore:
         Get a LangGraph checkpointer for this memory store.
         
         Returns:
-            SqliteSaver instance configured with the same database path
+            SqliteSaver instance configured with a separate agents database
         """
         if SqliteSaver is None:
             raise ImportError(
@@ -445,7 +445,9 @@ class MemoryStore:
                 "Install it with: pip install langgraph-checkpoint-sqlite"
             )
         
-        return SqliteSaver.from_conn_string(self.db_path)
+        # Use a separate database file for agent checkpointing to avoid conflicts
+        agents_db_path = self.db_path.replace('memory.db', 'agents.db')
+        return SqliteSaver.from_conn_string(agents_db_path)
     
     def get_next_version(self, current: Any = None, channel: Any = None) -> str:
         """

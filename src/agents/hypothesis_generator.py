@@ -176,7 +176,7 @@ Remember to maintain your creative approach while building on the conversation c
                         event_type = "creative_thinking"
                     
                     # Log the event
-                    asyncio.create_task(self.knowledge_api.log_event(
+                    self.knowledge_api.log_event_sync(
                         source="hypothesis_generator",
                         event_type=event_type,
                         payload={
@@ -187,7 +187,7 @@ Remember to maintain your creative approach while building on the conversation c
                             "risk_tolerance": self.risk_tolerance,
                             "tools_used": bool(response.tool_calls) if hasattr(response, 'tool_calls') else False
                         }
-                    ))
+                    )
                 except Exception as e:
                     print(f"⚠️ Event logging failed: {e}")
             
@@ -255,7 +255,6 @@ For each hypothesis, please format your response as:
         result = self.chat(prompt, thread_id=thread_id)
         
         # Parse and create hypotheses in the database
-        import asyncio
         import re
         try:
             # Extract individual hypotheses from the response
@@ -275,14 +274,14 @@ For each hypothesis, please format your response as:
                     initial_confidence = confidence_map.get(self.creativity_level, 0.5)
                     
                     # Create hypothesis in database
-                    asyncio.create_task(self.knowledge_api.propose_hypothesis(
+                    self.knowledge_api.propose_hypothesis_sync(
                         statement=hypothesis_text.strip(),
                         created_by="hypothesis_generator",
                         thread_id=thread_id,
                         session_id=session_id,
                         initial_confidence=initial_confidence,
                         domain=self._extract_domain_from_topic(topic)
-                    ))
+                    )
                     
         except Exception as e:
             print(f"⚠️ Hypothesis database creation failed: {e}")
