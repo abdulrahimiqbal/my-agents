@@ -447,30 +447,38 @@ class MemoryStore:
         
         return SqliteSaver.from_conn_string(self.db_path)
     
-    def get_next_version(self) -> str:
+    def get_next_version(self, current: Any = None, channel: Any = None) -> str:
         """
-        Get the next version for database migration.
-        This is a compatibility method that delegates to DatabaseMigrator.
+        Get the next version for LangGraph checkpointer compatibility.
+        This is a compatibility method that delegates to the actual checkpointer.
+        
+        Args:
+            current: Current version (LangGraph parameter)
+            channel: Channel information (LangGraph parameter)
         
         Returns:
             Next version string
         """
         try:
-            from ..database.migrations import DatabaseMigrator
-            migrator = DatabaseMigrator(self.db_path)
-            current_version = migrator.get_schema_version()
-            
-            # Simple version increment logic
-            if current_version == "1.0.0":
-                return "1.1.0"
-            elif current_version == "1.1.0":
-                return "1.2.0"
+            checkpointer = self.get_checkpointer()
+            if hasattr(checkpointer, 'get_next_version'):
+                return checkpointer.get_next_version(current, channel)
             else:
-                # Parse and increment
-                parts = current_version.split('.')
-                minor = int(parts[1]) + 1
-                return f"{parts[0]}.{minor}.0"
+                # Fallback - simple version increment logic
+                from ..database.migrations import DatabaseMigrator
+                migrator = DatabaseMigrator(self.db_path)
+                current_version = migrator.get_schema_version()
                 
+                if current_version == "1.0.0":
+                    return "1.1.0"
+                elif current_version == "1.1.0":
+                    return "1.2.0"
+                else:
+                    # Parse and increment
+                    parts = current_version.split('.')
+                    minor = int(parts[1]) + 1
+                    return f"{parts[0]}.{minor}.0"
+                    
         except Exception:
             return "1.1.0"  # Default next version
     
