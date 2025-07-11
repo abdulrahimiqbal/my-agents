@@ -473,6 +473,27 @@ class MemoryStore:
                 
         except Exception:
             return "1.1.0"  # Default next version
+    
+    async def aput_writes(self, config: Dict[str, Any], writes: List[Any], task_id: str) -> None:
+        """
+        Async method to handle writes for LangGraph checkpointer compatibility.
+        This is a compatibility method that delegates to the actual checkpointer.
+        
+        Args:
+            config: Configuration dictionary
+            writes: List of writes to process
+            task_id: Task identifier
+        """
+        try:
+            checkpointer = self.get_checkpointer()
+            if hasattr(checkpointer, 'aput_writes'):
+                await checkpointer.aput_writes(config, writes, task_id)
+            else:
+                # Fallback - log the writes for debugging
+                print(f"⚠️ aput_writes called but not supported by checkpointer: {writes}")
+        except Exception as e:
+            print(f"❌ aput_writes failed: {e}")
+            # Don't raise to avoid breaking the workflow
 
 
 # Global memory store instance
