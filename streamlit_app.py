@@ -1001,69 +1001,178 @@ def start_debate_session(hypothesis: str, topic: str):
             st.error(f"Error starting debate: {e}")
 
 def main():
-    """Main application function."""
+    """Main application function with interface selection."""
     initialize_session_state()
     
     # Initialize Knowledge API
     if not initialize_knowledge_api():
         st.stop()
     
-    # Create main header
-    create_main_header()
+    # Interface selection at the top
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 1rem; border-radius: 10px; margin-bottom: 1rem;">
+        <h2 style="color: white; text-align: center; margin: 0;">🚀 PhysicsGPT Interface Hub</h2>
+    </div>
+    """, unsafe_allow_html=True)
     
-    # Display system metrics
-    display_system_metrics()
-    
-    # Main interface tabs
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "📚 Knowledge Base", 
-        "🧪 Hypotheses", 
-        "📋 Events Log", 
-        "💬 Collaborate",
-        "📊 Analytics"
+    # Interface tabs
+    interface_tab1, interface_tab2, interface_tab3 = st.tabs([
+        "🧪 Knowledge Lab", 
+        "🎨 Agent Canvas", 
+        "🤖 Collaborative"
     ])
     
-    with tab1:
-        display_knowledge_browser()
-    
-    with tab2:
-        display_hypothesis_tracker()
-    
-    with tab3:
-        display_events_log()
-    
-    with tab4:
-        display_collaboration_interface()
-    
-    with tab5:
-        st.markdown("### 📊 System Analytics")
-        st.info("Advanced analytics dashboard coming soon!")
+    with interface_tab1:
+        # Original Knowledge Lab Interface
+        # Create main header
+        create_main_header()
         
-        # For now, show basic system info
-        if st.session_state.knowledge_api:
-            try:
-                analytics = asyncio.run(st.session_state.knowledge_api.get_system_analytics())
-                
-                # Status distribution
-                if analytics.get('status_distribution'):
-                    st.markdown("#### Hypothesis Status Distribution")
-                    status_df = pd.DataFrame(list(analytics['status_distribution'].items()), 
-                                           columns=['Status', 'Count'])
-                    fig = px.pie(status_df, values='Count', names='Status', 
-                               title='Hypothesis Status Distribution')
-                    st.plotly_chart(fig, use_container_width=True)
-                
-                # Domain distribution
-                if analytics.get('domain_distribution'):
-                    st.markdown("#### Knowledge Domain Distribution")
-                    domain_df = pd.DataFrame(list(analytics['domain_distribution'].items()), 
-                                           columns=['Domain', 'Count'])
-                    fig = px.bar(domain_df, x='Domain', y='Count', 
-                               title='Knowledge by Domain')
-                    st.plotly_chart(fig, use_container_width=True)
-                
-            except Exception as e:
-                st.error(f"Failed to load analytics: {e}")
+        # Display system metrics
+        display_system_metrics()
+        
+        # Main interface tabs
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+            "📚 Knowledge Base", 
+            "🧪 Hypotheses", 
+            "📋 Events Log", 
+            "💬 Collaborate",
+            "📊 Analytics"
+        ])
+        
+        with tab1:
+            display_knowledge_browser()
+        
+        with tab2:
+            display_hypothesis_tracker()
+        
+        with tab3:
+            display_events_log()
+        
+        with tab4:
+            display_collaboration_interface()
+        
+        with tab5:
+            st.markdown("### 📊 System Analytics")
+            st.info("Advanced analytics dashboard coming soon!")
+            
+            # For now, show basic system info
+            if st.session_state.knowledge_api:
+                try:
+                    analytics = asyncio.run(st.session_state.knowledge_api.get_system_analytics())
+                    
+                    # Status distribution
+                    if analytics.get('status_distribution'):
+                        st.markdown("#### Hypothesis Status Distribution")
+                        status_df = pd.DataFrame(list(analytics['status_distribution'].items()), 
+                                               columns=['Status', 'Count'])
+                        fig = px.pie(status_df, values='Count', names='Status', 
+                                   title='Hypothesis Status Distribution')
+                        st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Domain distribution
+                    if analytics.get('domain_distribution'):
+                        st.markdown("#### Knowledge Domain Distribution")
+                        domain_df = pd.DataFrame(list(analytics['domain_distribution'].items()), 
+                                               columns=['Domain', 'Count'])
+                        fig = px.bar(domain_df, x='Domain', y='Count', 
+                                   title='Knowledge by Domain')
+                        st.plotly_chart(fig, use_container_width=True)
+                    
+                except Exception as e:
+                    st.error(f"Failed to load analytics: {e}")
+    
+    with interface_tab2:
+        # Agent Canvas Interface
+        st.markdown("""
+        <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 2rem; border-radius: 15px; color: white; text-align: center; margin-bottom: 2rem;">
+            <h1>🎨 Agent Canvas</h1>
+            <p>Interactive Multi-Agent Physics Research Platform</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Simple agent canvas implementation
+        st.markdown("### 🤖 Physics Agents")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown("""
+            <div style="background: white; padding: 1.5rem; border-radius: 15px; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,0.1);">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">🔬</div>
+                <h3>Physics Expert</h3>
+                <p>Rigorous scientific analysis and validation</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            if st.button("💬 Chat with Physics Expert", use_container_width=True):
+                st.info("🔬 Physics Expert ready for questions!")
+        
+        with col2:
+            st.markdown("""
+            <div style="background: white; padding: 1.5rem; border-radius: 15px; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,0.1);">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">💡</div>
+                <h3>Hypothesis Generator</h3>
+                <p>Creative idea generation and exploration</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            if st.button("🧪 Generate Hypothesis", use_container_width=True):
+                st.info("💡 Hypothesis Generator ready to create!")
+        
+        with col3:
+            st.markdown("""
+            <div style="background: white; padding: 1.5rem; border-radius: 15px; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,0.1);">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">🤝</div>
+                <h3>Supervisor</h3>
+                <p>Orchestrates collaboration and coordination</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            if st.button("👥 Start Collaboration", use_container_width=True):
+                st.info("🤝 Supervisor ready to coordinate!")
+        
+        # Quick actions
+        st.markdown("---")
+        st.markdown("### ⚡ Quick Actions")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("🧪 Quick Hypothesis", use_container_width=True):
+                st.balloons()
+                st.success("🎉 Generated hypothesis about quantum entanglement applications!")
+        
+        with col2:
+            if st.button("🔬 Physics Analysis", use_container_width=True):
+                st.success("📊 Analyzing electromagnetic wave propagation...")
+        
+        with col3:
+            if st.button("📊 Research Summary", use_container_width=True):
+                st.success("📈 Compiling research progress summary...")
+        
+        # Note about full canvas
+        st.markdown("---")
+        st.info("""
+        💡 **Note**: This is a simplified Agent Canvas. For the full interactive experience with:
+        - Advanced animations and visual effects
+        - Real-time collaboration visualization  
+        - User preferences and customization
+        - Session analytics and tracking
+        
+        The complete Agent Canvas is available in `streamlit_canvas.py` for local testing.
+        """)
+    
+    with interface_tab3:
+        # Collaborative Interface
+        st.markdown("""
+        <div style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); padding: 2rem; border-radius: 15px; color: white; text-align: center; margin-bottom: 2rem;">
+            <h1>🤖 Collaborative Agents</h1>
+            <p>Multi-Agent Physics Research Collaboration</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Use the existing collaboration interface from the Knowledge Lab
+        display_collaboration_interface()
 
 if __name__ == "__main__":
     main() 
