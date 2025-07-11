@@ -1,6 +1,6 @@
-"""Hypothesis Generator Agent - Specialized agent for creative physics thinking and hypothesis generation."""
+"""Hypothesis Generator Agent - Specialized agent for creative hypothesis generation and research gap identification."""
 
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from langchain_core.messages import SystemMessage
 from langgraph.graph import StateGraph, MessagesState, START
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -11,12 +11,13 @@ from ..tools.physics_research import get_physics_research_tools
 
 
 class HypothesisGeneratorAgent(BaseAgent):
-    """A specialized agent for generating creative hypotheses and alternative approaches in physics."""
+    """Hypothesis generator agent specialized in creative physics research."""
     
     def __init__(self, 
                  creativity_level: str = "high",
                  exploration_scope: str = "broad",
                  risk_tolerance: str = "medium",
+                 memory_enabled: bool = True,
                  **kwargs):
         """Initialize the hypothesis generator agent.
         
@@ -24,11 +25,13 @@ class HypothesisGeneratorAgent(BaseAgent):
             creativity_level: Level of creativity (conservative, moderate, high, bold)
             exploration_scope: Scope of exploration (focused, broad, interdisciplinary)
             risk_tolerance: Tolerance for speculative ideas (low, medium, high)
+            memory_enabled: Whether to enable memory for the agent
             **kwargs: Additional arguments for BaseAgent
         """
         self.creativity_level = creativity_level
         self.exploration_scope = exploration_scope
         self.risk_tolerance = risk_tolerance
+        self.memory_enabled = memory_enabled
         self.system_message = self._create_hypothesis_system_message()
         
         super().__init__(**kwargs)
@@ -200,7 +203,7 @@ Use your creative thinking tools to:
 Focus on ideas that might not be immediately obvious but are scientifically sound and potentially groundbreaking.
 """
         
-        return self.run(prompt, thread_id=thread_id)
+        return self.chat(prompt, thread_id=thread_id)
     
     def identify_research_gaps(self, 
                              field: str, 
@@ -230,7 +233,7 @@ Use your research gap analysis tools to:
 Focus on gaps that could lead to significant advances or new understanding in physics.
 """
         
-        return self.run(prompt, thread_id=thread_id)
+        return self.chat(prompt, thread_id=thread_id)
     
     def propose_alternative_approaches(self, 
                                      problem: str, 
@@ -260,7 +263,7 @@ Use your creative thinking tools to:
 Think beyond traditional methods and consider approaches that might reveal new insights or lead to breakthrough discoveries.
 """
         
-        return self.run(prompt, thread_id=thread_id)
+        return self.chat(prompt, thread_id=thread_id)
     
     def design_experiment(self, 
                          hypothesis: str, 
@@ -291,7 +294,7 @@ Use your experimental design tools to:
 Focus on creative but practical experimental approaches that could provide clear evidence for or against the hypothesis.
 """
         
-        return self.run(prompt, thread_id=thread_id)
+        return self.chat(prompt, thread_id=thread_id)
     
     def collaborate_with_expert(self, 
                               expert_input: str, 
@@ -322,4 +325,29 @@ As a creative hypothesis generator, please:
 Your goal is to complement the expert's knowledge with creative thinking and novel ideas while maintaining scientific rigor.
 """
         
-        return self.run(prompt, thread_id=thread_id) 
+        return self.chat(prompt, thread_id=thread_id) 
+    
+    def get_agent_info(self) -> Dict[str, Any]:
+        """Get information about this hypothesis generator agent."""
+        return {
+            "name": "HypothesisGeneratorAgent",
+            "type": "hypothesis_generator",
+            "description": "A specialized agent for generating creative hypotheses and alternative approaches in physics",
+            "capabilities": [
+                "Creative hypothesis generation",
+                "Research gap identification",
+                "Alternative approach proposal",
+                "Experimental design",
+                "Creative collaboration"
+            ],
+            "creativity_level": self.creativity_level,
+            "exploration_scope": self.exploration_scope,
+            "risk_tolerance": self.risk_tolerance,
+            "tools": [
+                "Hypothesis generation frameworks",
+                "Research gap analysis",
+                "Alternative approach brainstorming",
+                "Experimental design templates"
+            ],
+            "version": "1.0.0"
+        } 

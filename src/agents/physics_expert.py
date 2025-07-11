@@ -1,6 +1,6 @@
 """Physics Expert Agent - Specialized agent for physics problems and explanations."""
 
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from langchain_core.messages import SystemMessage
 from langgraph.graph import StateGraph, MessagesState, START
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -18,16 +18,19 @@ class PhysicsExpertAgent(BaseAgent):
     def __init__(self, 
                  difficulty_level: str = "undergraduate",
                  specialty: Optional[str] = None,
+                 memory_enabled: bool = True,
                  **kwargs):
         """Initialize the physics expert agent.
         
         Args:
             difficulty_level: Target difficulty (high_school, undergraduate, graduate, research)
             specialty: Physics specialty (mechanics, electromagnetism, quantum, etc.)
+            memory_enabled: Whether to enable memory for the agent
             **kwargs: Additional arguments for BaseAgent
         """
         self.difficulty_level = difficulty_level
         self.specialty = specialty
+        self.memory_enabled = memory_enabled
         self.system_message = self._create_physics_system_message()
         
         super().__init__(**kwargs)
@@ -180,7 +183,7 @@ Remember to maintain consistency with the established difficulty level and build
 {"6. Alternative solution methods if applicable" if show_steps else ""}
 """
         
-        return self.run(prompt, thread_id=thread_id)
+        return self.chat(prompt, thread_id=thread_id)
     
     def explain_concept(self, 
                        concept: str, 
@@ -210,7 +213,7 @@ Target this explanation for {target_level} level understanding. Include:
 7. Suggested follow-up topics to explore
 """
         
-        return self.run(prompt, thread_id=thread_id)
+        return self.chat(prompt, thread_id=thread_id)
     
     def research_topic(self, 
                       topic: str, 
@@ -239,7 +242,7 @@ Provide:
 6. References to key papers or sources
 """
         
-        return self.run(prompt, thread_id=thread_id)
+        return self.chat(prompt, thread_id=thread_id)
     
     def evaluate_hypothesis(self, 
                           hypothesis: str, 
@@ -272,7 +275,7 @@ As a physics expert, provide a comprehensive evaluation including:
 Be rigorous but constructive in your analysis, and suggest improvements or refinements if needed.
 """
         
-        return self.run(prompt, thread_id=thread_id)
+        return self.chat(prompt, thread_id=thread_id)
     
     def peer_review_analysis(self, 
                            analysis: str, 
@@ -305,7 +308,7 @@ As a physics expert, evaluate:
 Provide constructive feedback that maintains scientific rigor while encouraging innovation.
 """
         
-        return self.run(prompt, thread_id=thread_id)
+        return self.chat(prompt, thread_id=thread_id)
     
     def collaborate_with_hypothesis_generator(self, 
                                             hypothesis_input: str, 
@@ -338,7 +341,7 @@ As a physics expert, please:
 Your goal is to provide rigorous scientific analysis while encouraging creative thinking and innovation.
 """
         
-        return self.run(prompt, thread_id=thread_id)
+        return self.chat(prompt, thread_id=thread_id)
     
     def validate_experimental_design(self, 
                                    experiment_design: str, 
@@ -374,4 +377,29 @@ As a physics expert, evaluate:
 Provide specific suggestions for improving the experimental design while maintaining scientific rigor.
 """
         
-        return self.run(prompt, thread_id=thread_id) 
+        return self.chat(prompt, thread_id=thread_id) 
+    
+    def get_agent_info(self) -> Dict[str, Any]:
+        """Get information about this physics expert agent."""
+        return {
+            "name": "PhysicsExpertAgent",
+            "type": "physics_expert", 
+            "description": "A specialized physics expert agent with comprehensive physics knowledge",
+            "capabilities": [
+                "Physics problem solving",
+                "Concept explanation", 
+                "Hypothesis evaluation",
+                "Peer review analysis",
+                "Experimental design validation",
+                "Research topic analysis"
+            ],
+            "difficulty_level": self.difficulty_level,
+            "specialty": self.specialty,
+            "tools": [
+                "Physics calculator",
+                "Research paper search", 
+                "Physics constants database",
+                "Unit converter"
+            ],
+            "version": "1.0.0"
+        } 

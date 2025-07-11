@@ -148,7 +148,7 @@ class CollaborativePhysicsSystem:
             session["mode"] = mode
         
         # Continue collaboration
-        response = self.supervisor.run(user_input, thread_id=session_id)
+        response = self.supervisor.chat(user_input, thread_id=session_id)
         
         # Update session
         session["iteration_count"] += 1
@@ -278,7 +278,7 @@ class CollaborativePhysicsSystem:
         Provide a comprehensive synthesis that combines both perspectives.
         """
         
-        synthesis = self.supervisor.run(synthesis_prompt, thread_id=session_id)
+        synthesis = self.supervisor.chat(synthesis_prompt, thread_id=session_id)
         
         return {
             "expert_analysis": expert_analysis,
@@ -317,7 +317,7 @@ class CollaborativePhysicsSystem:
         5. Suggested next steps
         """
         
-        summary = self.supervisor.run(summary_prompt, thread_id=session_id)
+        summary = self.supervisor.chat(summary_prompt, thread_id=session_id)
         
         return {
             "session_info": session,

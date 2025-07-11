@@ -32,6 +32,7 @@ class SupervisorAgent(BaseAgent):
                  hypothesis_generator: Optional[HypothesisGeneratorAgent] = None,
                  collaboration_style: str = "balanced",
                  max_iterations: int = 5,
+                 memory_enabled: bool = True,
                  **kwargs):
         """Initialize the supervisor agent.
         
@@ -40,12 +41,14 @@ class SupervisorAgent(BaseAgent):
             hypothesis_generator: Hypothesis Generator Agent instance
             collaboration_style: Style of collaboration (balanced, expert_led, creative_led)
             max_iterations: Maximum collaboration iterations
+            memory_enabled: Whether to enable memory for the agent
             **kwargs: Additional arguments for BaseAgent
         """
         self.physics_expert = physics_expert
         self.hypothesis_generator = hypothesis_generator
         self.collaboration_style = collaboration_style
         self.max_iterations = max_iterations
+        self.memory_enabled = memory_enabled
         self.system_message = self._create_supervisor_system_message()
         
         super().__init__(**kwargs)
@@ -148,7 +151,7 @@ Analyze the conversation and decide the next step in the collaboration process.
             latest_message = state["messages"][-1].content if state["messages"] else ""
             
             # Run physics expert analysis
-            response = self.physics_expert.run(latest_message)
+            response = self.physics_expert.chat(latest_message)
             return {"messages": [AIMessage(content=f"🔬 **Physics Expert**: {response}")]}
         
         # Define hypothesis generator node
@@ -161,7 +164,7 @@ Analyze the conversation and decide the next step in the collaboration process.
             latest_message = state["messages"][-1].content if state["messages"] else ""
             
             # Run hypothesis generation
-            response = self.hypothesis_generator.run(latest_message)
+            response = self.hypothesis_generator.chat(latest_message)
             return {"messages": [AIMessage(content=f"💡 **Hypothesis Generator**: {response}")]}
         
         # Define synthesis node
@@ -287,7 +290,7 @@ Ensure both agents contribute their unique expertise while maintaining scientifi
             "consensus_reached": False
         }
         
-        return self.run(prompt, thread_id=thread_id)
+        return self.chat(prompt, thread_id=thread_id)
     
     def facilitate_debate(self, 
                          hypothesis: str, 
@@ -317,7 +320,7 @@ Orchestrate a debate where:
 Maintain scientific rigor while encouraging innovative thinking.
 """
         
-        return self.run(prompt, thread_id=thread_id)
+        return self.chat(prompt, thread_id=thread_id)
     
     def collaborative_problem_solving(self, 
                                     problem: str, 
@@ -347,4 +350,32 @@ Guide the collaboration to:
 Ensure the final solution is both scientifically sound and creatively informed.
 """
         
-        return self.run(prompt, thread_id=thread_id) 
+        return self.chat(prompt, thread_id=thread_id) 
+    
+    def get_agent_info(self) -> Dict[str, Any]:
+        """Get information about this supervisor agent."""
+        return {
+            "name": "SupervisorAgent",
+            "type": "supervisor",
+            "description": "A supervisor agent that orchestrates collaboration between specialized physics agents",
+            "capabilities": [
+                "Multi-agent coordination",
+                "Collaborative research orchestration",
+                "Debate facilitation",
+                "Problem-solving coordination",
+                "Synthesis and consensus building"
+            ],
+            "collaboration_style": self.collaboration_style,
+            "max_iterations": self.max_iterations,
+            "managed_agents": [
+                "PhysicsExpertAgent" if self.physics_expert else None,
+                "HypothesisGeneratorAgent" if self.hypothesis_generator else None
+            ],
+            "collaboration_modes": [
+                "research",
+                "debate", 
+                "brainstorm",
+                "teaching"
+            ],
+            "version": "1.0.0"
+        } 
