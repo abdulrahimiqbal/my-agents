@@ -1,162 +1,171 @@
 """
-PhysicsGPT - Interactive Physics Expert Chat Agent
-A comprehensive Streamlit interface for physics problem solving and education.
+Collaborative PhysicsGPT with Knowledge Management - Advanced Streamlit Interface
+Multi-agent physics research system with empirical event logging and knowledge tracking.
 """
 
 import streamlit as st
-import os
-import sys
-import traceback
-from typing import Optional, Dict, Any
+import asyncio
+import json
+import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
-import numpy as np
-import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Dict, Any, List, Optional
+import traceback
 
-# Simple path setup for Streamlit Cloud
+# Simple path setup for imports
+import sys
+import os
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
 sys.path.insert(0, os.path.join(current_dir, 'src'))
 
-# Import with fallback error handling
+# Import our components
 try:
-    # Try direct imports first
-    import src.agents.physics_expert as physics_expert_module
-    import src.config.settings as settings_module
-    import src.memory.stores as memory_module
-    
-    PhysicsExpertAgent = physics_expert_module.PhysicsExpertAgent
-    Settings = settings_module.Settings
-    MemoryStore = memory_module.MemoryStore
-    
-except ImportError as e1:
-    try:
-        # Fallback to relative imports
-        from src.agents.physics_expert import PhysicsExpertAgent
-        from src.config.settings import Settings
-        from src.memory.stores import MemoryStore
-    except ImportError as e2:
-        try:
-            # Last resort: direct module imports
-            from agents.physics_expert import PhysicsExpertAgent
-            from config.settings import Settings
-            from memory.stores import MemoryStore
-        except ImportError as e3:
-            st.error("❌ **Import Error**: Unable to load PhysicsGPT modules")
-            st.error("**Debug Information:**")
-            st.code(f"Error 1: {e1}")
-            st.code(f"Error 2: {e2}")
-            st.code(f"Error 3: {e3}")
-            st.code(f"Current directory: {current_dir}")
-            st.code(f"Python path: {sys.path[:5]}")
-            st.code(f"Directory contents: {os.listdir(current_dir)}")
-            if os.path.exists(os.path.join(current_dir, 'src')):
-                st.code(f"Src directory contents: {os.listdir(os.path.join(current_dir, 'src'))}")
-            st.stop()
+    from src.agents import CollaborativePhysicsSystem
+    from src.database import KnowledgeAPI, DatabaseMigrator
+    from src.config import get_settings
+    from src.memory import get_memory_store
+except ImportError as e:
+    st.error(f"❌ **Import Error**: {e}")
+    st.stop()
 
 # Page configuration
 st.set_page_config(
-    page_title="PhysicsGPT - AI Physics Expert",
-    page_icon="⚛️",
+    page_title="PhysicsGPT Knowledge Lab",
+    page_icon="🧪",
     layout="wide",
-    initial_sidebar_state="expanded",
-    menu_items={
-        'Get Help': 'https://github.com/abdulrahimiqbal/my-agents',
-        'Report a bug': "https://github.com/abdulrahimiqbal/my-agents/issues",
-        'About': "PhysicsGPT - Your AI Physics Expert powered by LangChain and OpenAI"
-    }
+    initial_sidebar_state="expanded"
 )
 
-# Custom CSS for physics theme
+# Custom CSS for knowledge management theme
 st.markdown("""
 <style>
     .main-header {
-        background: linear-gradient(90deg, #1e3a8a 0%, #3b82f6 50%, #06b6d4 100%);
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         padding: 2rem;
-        border-radius: 10px;
+        border-radius: 15px;
         color: white;
         text-align: center;
         margin-bottom: 2rem;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.1);
     }
     
-    .physics-card {
+    .knowledge-card {
         background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
         padding: 1.5rem;
-        border-radius: 10px;
+        border-radius: 12px;
+        margin: 1rem 0;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.1);
         border-left: 4px solid #3b82f6;
-        margin: 1rem 0;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
     }
     
-    .equation-display {
-        background: #1e293b;
-        color: #f1f5f9;
-        padding: 1rem;
-        border-radius: 8px;
-        font-family: 'Courier New', monospace;
-        font-size: 1.2em;
-        text-align: center;
-        margin: 1rem 0;
-    }
-    
-    .physics-concept {
-        background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
-        padding: 1rem;
-        border-radius: 8px;
-        border-left: 4px solid #10b981;
-        margin: 0.5rem 0;
-    }
-    
-    .warning-box {
-        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-        padding: 1rem;
-        border-radius: 8px;
-        border-left: 4px solid #f59e0b;
-        margin: 1rem 0;
-    }
-    
-    .sidebar .sidebar-content {
-        background: linear-gradient(180deg, #1e40af 0%, #3b82f6 100%);
-    }
-    
-    .stButton > button {
-        background: linear-gradient(90deg, #3b82f6 0%, #06b6d4 100%);
-        color: white;
-        border: none;
-        border-radius: 8px;
-        padding: 0.5rem 1rem;
-        font-weight: 600;
-        transition: all 0.3s;
-    }
-    
-    .stButton > button:hover {
+    .knowledge-card:hover {
         transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
     }
     
-    .chat-message {
-        padding: 1rem;
-        margin: 0.5rem 0;
-        border-radius: 10px;
+    .hypothesis-card {
+        background: linear-gradient(135deg, #fef3c7 0%, #f59e0b 20%, #fef3c7 100%);
+        border-left: 4px solid #f59e0b;
     }
     
-    .user-message {
-        background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
-        border-left: 4px solid #3b82f6;
-    }
-    
-    .assistant-message {
-        background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+    .knowledge-promoted {
+        background: linear-gradient(135deg, #d1fae5 0%, #10b981 20%, #d1fae5 100%);
         border-left: 4px solid #10b981;
+    }
+    
+    .event-card {
+        background: linear-gradient(135deg, #e0f2fe 0%, #0ea5e9 20%, #e0f2fe 100%);
+        border-left: 4px solid #0ea5e9;
     }
     
     .metric-card {
         background: white;
-        padding: 1rem;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        padding: 1.5rem;
+        border-radius: 12px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.08);
         text-align: center;
+        border: 1px solid #e5e7eb;
+    }
+    
+    .metric-value {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #3b82f6;
+        margin-bottom: 0.5rem;
+    }
+    
+    .metric-label {
+        color: #6b7280;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .agent-indicator {
+        display: inline-block;
+        padding: 0.3rem 0.8rem;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+    
+    .physics-expert {
+        background: #10b981;
+        color: white;
+    }
+    
+    .hypothesis-generator {
+        background: #f59e0b;
+        color: white;
+    }
+    
+    .supervisor {
+        background: #8b5cf6;
+        color: white;
+    }
+    
+    .confidence-high {
+        background: #10b981;
+        color: white;
+        padding: 0.2rem 0.6rem;
+        border-radius: 12px;
+        font-size: 0.8rem;
+    }
+    
+    .confidence-medium {
+        background: #f59e0b;
+        color: white;
+        padding: 0.2rem 0.6rem;
+        border-radius: 12px;
+        font-size: 0.8rem;
+    }
+    
+    .confidence-low {
+        background: #ef4444;
+        color: white;
+        padding: 0.2rem 0.6rem;
+        border-radius: 12px;
+        font-size: 0.8rem;
+    }
+    
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
+        border: 1px solid #e5e7eb;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+        color: white;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -164,418 +173,897 @@ st.markdown("""
 # Initialize session state
 def initialize_session_state():
     """Initialize session state variables."""
-    if 'physics_agent' not in st.session_state:
-        st.session_state.physics_agent = None
-    if 'chat_history' not in st.session_state:
-        st.session_state.chat_history = []
-    if 'settings' not in st.session_state:
-        st.session_state.settings = None
-    if 'thread_id' not in st.session_state:
-        st.session_state.thread_id = f"physics_chat_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    if 'problem_count' not in st.session_state:
-        st.session_state.problem_count = 0
-    if 'concept_count' not in st.session_state:
-        st.session_state.concept_count = 0
+    if 'knowledge_api' not in st.session_state:
+        st.session_state.knowledge_api = None
+    if 'collaborative_system' not in st.session_state:
+        st.session_state.collaborative_system = None
+    if 'current_session_id' not in st.session_state:
+        st.session_state.current_session_id = None
+    if 'selected_hypothesis_id' not in st.session_state:
+        st.session_state.selected_hypothesis_id = None
+    if 'selected_knowledge_id' not in st.session_state:
+        st.session_state.selected_knowledge_id = None
 
-def load_physics_agent() -> Optional[PhysicsExpertAgent]:
-    """Load and initialize the physics expert agent."""
-    try:
-        # Load settings
-        settings = Settings()
-        st.session_state.settings = settings
-        
-        # Initialize memory store
-        memory_store = MemoryStore(db_path="physics_memory.db")
-        
-        # Create physics agent
-        agent = PhysicsExpertAgent(
-            difficulty_level=st.session_state.get('difficulty_level', 'undergraduate'),
-            specialty=st.session_state.get('specialty', None),
-            memory_enabled=True,
-            memory=memory_store.get_checkpointer()
-        )
-        
-        return agent
-    except Exception as e:
-        st.error(f"Error loading physics agent: {e}")
-        return None
+def initialize_knowledge_api():
+    """Initialize the Knowledge API."""
+    if st.session_state.knowledge_api is None:
+        try:
+            # Run migration first
+            with st.spinner("🔄 Initializing knowledge management system..."):
+                migrator = DatabaseMigrator("./data/memory.db")
+                migration_success = migrator.migrate()
+                
+                if migration_success:
+                    st.session_state.knowledge_api = KnowledgeAPI()
+                    st.success("✅ Knowledge management system initialized!")
+                else:
+                    st.error("❌ Failed to initialize knowledge management system")
+                    return False
+        except Exception as e:
+            st.error(f"❌ Knowledge API initialization failed: {e}")
+            return False
+    return True
 
-def create_header():
-    """Create the main header with physics theme."""
+def create_main_header():
+    """Create the main header."""
     st.markdown("""
     <div class="main-header">
-        <h1>⚛️ PhysicsGPT</h1>
-        <p style="font-size: 1.2em; margin: 0;">Your AI Physics Expert & Problem Solver</p>
-        <p style="opacity: 0.9; margin: 0.5rem 0 0 0;">Powered by LangChain • OpenAI • Advanced Physics Tools</p>
+        <h1>🧪 PhysicsGPT Knowledge Lab</h1>
+        <p>Advanced Multi-Agent Physics Research with Knowledge Management</p>
+        <p style="font-size: 1.1em; margin-top: 1rem;">
+            🔬 Physics Expert • 💡 Hypothesis Generator • 🤝 Supervisor • 📊 Knowledge Tracker
+        </p>
     </div>
     """, unsafe_allow_html=True)
 
-def create_sidebar():
-    """Create the sidebar with agent configuration."""
-    with st.sidebar:
-        # Navigation
-        st.markdown("## 🧭 Navigation")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🔬 Single Agent", type="secondary", help="Current: Single PhysicsGPT"):
-                st.info("✅ You're using the single-agent PhysicsGPT")
-        
-        with col2:
-            if st.button("🤖 Multi-Agent", type="primary", help="New: Collaborative System"):
-                st.markdown("**🚀 New Collaborative PhysicsGPT!**")
-                st.markdown("Multiple AI agents working together:")
-                st.markdown("- 🔬 Physics Expert")
-                st.markdown("- 💡 Hypothesis Generator") 
-                st.markdown("- 🤝 Supervisor Agent")
-                st.info("**To launch:** Run `streamlit run streamlit_collaborative.py` in a new terminal")
-        
-        st.markdown("---")
-        
-        st.markdown("## ⚙️ Physics Agent Settings")
-        
-        # Difficulty level selection
-        difficulty_level = st.selectbox(
-            "🎓 Difficulty Level",
-            ["high_school", "undergraduate", "graduate", "research"],
-            index=1,
-            help="Select the appropriate difficulty level for explanations and problems"
-        )
-        
-        # Physics specialty
-        specialty = st.selectbox(
-            "🔬 Physics Specialty",
-            [None, "mechanics", "electromagnetism", "quantum", "thermodynamics", 
-             "relativity", "optics", "particle_physics", "cosmology", "condensed_matter"],
-            help="Optional specialty focus for the agent"
-        )
-        
-        # Update session state
-        if st.session_state.get('difficulty_level') != difficulty_level:
-            st.session_state.difficulty_level = difficulty_level
-            st.session_state.physics_agent = None  # Reload agent
-        
-        if st.session_state.get('specialty') != specialty:
-            st.session_state.specialty = specialty
-            st.session_state.physics_agent = None  # Reload agent
-        
-        st.markdown("---")
-        
-        # Quick actions
-        st.markdown("## 🚀 Quick Actions")
-        
-        if st.button("🧮 Physics Calculator", use_container_width=True):
-            st.session_state.quick_action = "calculator"
-        
-        if st.button("📚 Physics Constants", use_container_width=True):
-            st.session_state.quick_action = "constants"
-        
-        if st.button("🔄 Unit Converter", use_container_width=True):
-            st.session_state.quick_action = "converter"
-        
-        if st.button("📖 Equation Lookup", use_container_width=True):
-            st.session_state.quick_action = "equations"
-        
-        if st.button("🔍 ArXiv Search", use_container_width=True):
-            st.session_state.quick_action = "arxiv"
-        
-        st.markdown("---")
-        
-        # Session statistics
-        st.markdown("## 📊 Session Stats")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Problems Solved", st.session_state.problem_count)
-        with col2:
-            st.metric("Concepts Explored", st.session_state.concept_count)
-        
-        # Clear chat button
-        if st.button("🗑️ Clear Chat", use_container_width=True):
-            st.session_state.chat_history = []
-            st.session_state.problem_count = 0
-            st.session_state.concept_count = 0
-            st.rerun()
+def display_system_metrics():
+    """Display system-wide metrics."""
+    if st.session_state.knowledge_api:
+        try:
+            # Get system analytics
+            analytics = asyncio.run(st.session_state.knowledge_api.get_system_analytics())
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-value">{analytics.get('total_knowledge', 0)}</div>
+                    <div class="metric-label">Knowledge Entries</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-value">{analytics.get('total_hypotheses', 0)}</div>
+                    <div class="metric-label">Hypotheses</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col3:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-value">{analytics.get('total_events', 0)}</div>
+                    <div class="metric-label">Events Logged</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col4:
+                promotion_rate = analytics.get('promotion_rate', 0)
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-value">{promotion_rate:.1%}</div>
+                    <div class="metric-label">Promotion Rate</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+        except Exception as e:
+            st.error(f"Failed to load system metrics: {e}")
 
-def display_quick_action_interface():
-    """Display interface for quick actions."""
-    if 'quick_action' not in st.session_state:
+def display_knowledge_browser():
+    """Display the knowledge browser interface."""
+    st.markdown("### 📚 Knowledge Base Browser")
+    
+    # Search and filter controls
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        search_query = st.text_input("🔍 Search Knowledge", placeholder="quantum entanglement")
+    
+    with col2:
+        domain_filter = st.selectbox("📂 Domain", ["All", "quantum", "classical", "thermodynamics", "electromagnetism", "relativity", "particle", "astrophysics", "condensed_matter"])
+    
+    with col3:
+        confidence_filter = st.slider("🎯 Min Confidence", 0.0, 1.0, 0.5, 0.1)
+    
+    if st.button("🔍 Search Knowledge") or search_query:
+        try:
+            if search_query:
+                # Search with query
+                results = asyncio.run(st.session_state.knowledge_api.search_knowledge(
+                    query=search_query,
+                    domain=domain_filter if domain_filter != "All" else None,
+                    confidence_threshold=confidence_filter
+                ))
+            else:
+                # Get all knowledge for domain
+                if domain_filter != "All":
+                    results = asyncio.run(st.session_state.knowledge_api.get_knowledge_by_domain(domain_filter))
+                else:
+                    results = []
+            
+            if results:
+                st.markdown(f"Found {len(results)} knowledge entries:")
+                
+                for knowledge in results:
+                    with st.expander(f"📖 {knowledge['statement'][:100]}..."):
+                        st.markdown(f"**Statement:** {knowledge['statement']}")
+                        
+                        # Display confidence
+                        confidence = knowledge.get('confidence', 0)
+                        if confidence > 0.8:
+                            confidence_class = "confidence-high"
+                        elif confidence > 0.5:
+                            confidence_class = "confidence-medium"
+                        else:
+                            confidence_class = "confidence-low"
+                        
+                        st.markdown(f'<span class="{confidence_class}">Confidence: {confidence:.2f}</span>', unsafe_allow_html=True)
+                        
+                        # Display domain and creation date
+                        st.markdown(f"**Domain:** {knowledge.get('domain', 'General')}")
+                        st.markdown(f"**Created:** {knowledge.get('created_at', 'Unknown')}")
+                        
+                        # Display provenance
+                        provenance = knowledge.get('provenance', {})
+                        if provenance:
+                            st.markdown("**🏆 Promotion History:**")
+                            
+                            if 'hypothesis_id' in provenance:
+                                st.markdown(f"- Promoted from Hypothesis #{provenance['hypothesis_id']}")
+                            
+                            if 'promoted_by' in provenance:
+                                st.markdown(f"- Promoted by: {provenance['promoted_by']}")
+                            
+                            if 'validation_events' in provenance:
+                                st.markdown(f"- Validation events: {len(provenance['validation_events'])}")
+                            
+                            if 'original_creator' in provenance:
+                                st.markdown(f"- Original creator: {provenance['original_creator']}")
+                        
+                        # Actions
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button(f"📊 View Details", key=f"knowledge_details_{knowledge['id']}"):
+                                st.session_state.selected_knowledge_id = knowledge['id']
+                        
+                        with col2:
+                            if st.button(f"🔗 Related Hypotheses", key=f"knowledge_related_{knowledge['id']}"):
+                                # Show related hypotheses
+                                st.info("Feature coming soon: Related hypotheses viewer")
+            
+            else:
+                st.info("No knowledge entries found matching your criteria.")
+                
+        except Exception as e:
+            st.error(f"Knowledge search failed: {e}")
+
+def display_hypothesis_tracker():
+    """Display the hypothesis tracker interface."""
+    st.markdown("### 🧪 Hypothesis Tracker")
+    
+    # Status tabs
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔄 Proposed", "🔬 Under Review", "✅ Validated", "🚀 Promoted", "❌ Refuted"])
+    
+    with tab1:  # Proposed hypotheses
+        hypotheses = asyncio.run(st.session_state.knowledge_api.get_hypotheses_by_status("proposed"))
+        display_hypotheses_list(hypotheses, "proposed")
+    
+    with tab2:  # Under review
+        hypotheses = asyncio.run(st.session_state.knowledge_api.get_hypotheses_by_status("under_review"))
+        display_hypotheses_list(hypotheses, "under_review")
+    
+    with tab3:  # Validated
+        hypotheses = asyncio.run(st.session_state.knowledge_api.get_hypotheses_by_status("validated"))
+        display_hypotheses_list(hypotheses, "validated")
+    
+    with tab4:  # Promoted
+        hypotheses = asyncio.run(st.session_state.knowledge_api.get_hypotheses_by_status("promoted"))
+        display_hypotheses_list(hypotheses, "promoted")
+    
+    with tab5:  # Refuted
+        hypotheses = asyncio.run(st.session_state.knowledge_api.get_hypotheses_by_status("refuted"))
+        display_hypotheses_list(hypotheses, "refuted")
+
+def display_hypotheses_list(hypotheses: List[Dict], status: str):
+    """Display a list of hypotheses with actions."""
+    if hypotheses:
+        st.markdown(f"Found {len(hypotheses)} {status} hypotheses:")
+        
+        for hyp in hypotheses:
+            with st.expander(f"💡 {hyp['statement'][:80]}... (Confidence: {hyp['confidence']:.2f})"):
+                st.markdown(f"**Statement:** {hyp['statement']}")
+                
+                # Display confidence with color coding
+                confidence = hyp['confidence']
+                if confidence > 0.8:
+                    confidence_class = "confidence-high"
+                elif confidence > 0.5:
+                    confidence_class = "confidence-medium"
+                else:
+                    confidence_class = "confidence-low"
+                
+                st.markdown(f'<span class="{confidence_class}">Confidence: {confidence:.2f}</span>', unsafe_allow_html=True)
+                
+                # Display metadata
+                st.markdown(f"**Created by:** {hyp.get('created_by', 'Unknown')}")
+                st.markdown(f"**Created:** {hyp.get('created_at', 'Unknown')}")
+                st.markdown(f"**Last updated:** {hyp.get('updated_at', 'Unknown')}")
+                
+                # Display supporting evidence count
+                support_count = len(hyp.get('support_ids', []))
+                st.markdown(f"**Supporting evidence:** {support_count} events")
+                
+                # Actions based on status
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    if st.button(f"📊 Analytics", key=f"analytics_{hyp['id']}"):
+                        display_hypothesis_analytics(hyp['id'])
+                
+                with col2:
+                    if status in ["proposed", "under_review", "validated"]:
+                        if st.button(f"🚀 Promote", key=f"promote_{hyp['id']}"):
+                            promote_hypothesis_to_knowledge(hyp['id'])
+                
+                with col3:
+                    if status in ["proposed", "under_review"]:
+                        if st.button(f"❌ Refute", key=f"refute_{hyp['id']}"):
+                            refute_hypothesis(hyp['id'])
+    else:
+        st.info(f"No {status} hypotheses found.")
+
+def display_hypothesis_analytics(hypothesis_id: int):
+    """Display detailed analytics for a hypothesis."""
+    try:
+        analytics = asyncio.run(st.session_state.knowledge_api.get_hypothesis_analytics(hypothesis_id))
+        
+        if 'error' in analytics:
+            st.error(f"Analytics error: {analytics['error']}")
+            return
+        
+        st.markdown("#### 📊 Hypothesis Analytics")
+        
+        # Basic info
+        hypothesis = analytics['hypothesis']
+        st.markdown(f"**Statement:** {hypothesis['statement']}")
+        st.markdown(f"**Current Confidence:** {hypothesis['confidence']:.2f}")
+        st.markdown(f"**Age:** {analytics['age_days']} days")
+        st.markdown(f"**Supporting Events:** {analytics['support_count']}")
+        
+        # Confidence history
+        if analytics['confidence_history']:
+            st.markdown("#### 📈 Confidence Evolution")
+            
+            confidence_df = pd.DataFrame(analytics['confidence_history'])
+            confidence_df['timestamp'] = pd.to_datetime(confidence_df['timestamp'])
+            
+            fig = px.line(confidence_df, x='timestamp', y='confidence', 
+                         title='Confidence Over Time',
+                         labels={'timestamp': 'Time', 'confidence': 'Confidence'})
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # Supporting events
+        if analytics['supporting_events']:
+            st.markdown("#### 🎯 Supporting Events")
+            
+            events_df = pd.DataFrame(analytics['supporting_events'])
+            st.dataframe(events_df[['timestamp', 'source', 'event_type']], use_container_width=True)
+        
+    except Exception as e:
+        st.error(f"Failed to load hypothesis analytics: {e}")
+
+def promote_hypothesis_to_knowledge(hypothesis_id: int):
+    """Promote a hypothesis to knowledge."""
+    try:
+        # Get supporting events for validation
+        hypothesis = asyncio.run(st.session_state.knowledge_api.get_hypothesis_analytics(hypothesis_id))
+        
+        if 'error' in hypothesis:
+            st.error(f"Cannot promote hypothesis: {hypothesis['error']}")
+            return
+        
+        # Extract validation events
+        validation_events = [event['id'] for event in hypothesis.get('supporting_events', [])]
+        
+        # Promote to knowledge
+        knowledge_id = asyncio.run(st.session_state.knowledge_api.promote_to_knowledge(
+            hypothesis_id=hypothesis_id,
+            validation_events=validation_events,
+            domain="general",  # Could be extracted from hypothesis
+            promoted_by="user"
+        ))
+        
+        st.success(f"✅ Hypothesis promoted to knowledge! Knowledge ID: {knowledge_id}")
+        st.rerun()
+        
+    except Exception as e:
+        st.error(f"Failed to promote hypothesis: {e}")
+
+def refute_hypothesis(hypothesis_id: int):
+    """Mark a hypothesis as refuted."""
+    try:
+        success = asyncio.run(st.session_state.knowledge_api.update_hypothesis_status(
+            hypothesis_id=hypothesis_id,
+            new_status="refuted",
+            reason="User decision",
+            updated_by="user"
+        ))
+        
+        if success:
+            st.success("✅ Hypothesis marked as refuted")
+            st.rerun()
+        else:
+            st.error("❌ Failed to update hypothesis status")
+            
+    except Exception as e:
+        st.error(f"Failed to refute hypothesis: {e}")
+
+def display_events_log():
+    """Display the events log interface."""
+    st.markdown("### 📋 Events Log")
+    
+    # Event type filter
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        event_type = st.selectbox("Event Type", ["All", "hypothesis_proposed", "hypothesis_evaluation", "confidence_updated", "hypothesis_promoted", "problem_solving", "concept_explanation"])
+    
+    with col2:
+        source_filter = st.selectbox("Source", ["All", "physics_expert", "hypothesis_generator", "supervisor", "user"])
+    
+    with col3:
+        days_back = st.slider("Days Back", 1, 30, 7)
+    
+    if st.button("🔍 Load Events"):
+        try:
+            since_date = datetime.now() - timedelta(days=days_back)
+            
+            if event_type == "All":
+                # Get recent events
+                events = asyncio.run(st.session_state.knowledge_api.get_events_by_type(
+                    event_type="hypothesis_proposed",  # This is a limitation - we'd need a get_all_events method
+                    since=since_date,
+                    source=source_filter if source_filter != "All" else None
+                ))
+            else:
+                events = asyncio.run(st.session_state.knowledge_api.get_events_by_type(
+                    event_type=event_type,
+                    since=since_date,
+                    source=source_filter if source_filter != "All" else None
+                ))
+            
+            if events:
+                st.markdown(f"Found {len(events)} events:")
+                
+                for event in events:
+                    with st.expander(f"🎯 {event['source']} - {event['event_type']} ({event['timestamp']})"):
+                        st.markdown(f"**Source:** {event['source']}")
+                        st.markdown(f"**Type:** {event['event_type']}")
+                        st.markdown(f"**Timestamp:** {event['timestamp']}")
+                        
+                        # Display payload
+                        if event.get('payload_json'):
+                            payload = json.loads(event['payload_json'])
+                            st.markdown("**Details:**")
+                            st.json(payload)
+            else:
+                st.info("No events found matching your criteria.")
+                
+        except Exception as e:
+            st.error(f"Failed to load events: {e}")
+
+def display_collaboration_interface():
+    """Display the enhanced collaborative interface with full multi-agent capabilities."""
+    st.markdown("### 🤖 Collaborative Physics Research")
+    
+    # Initialize enhanced session state for collaboration
+    initialize_collaborative_session_state()
+    
+    # Load collaborative system if needed
+    if st.session_state.collaborative_system is None:
+        st.session_state.collaborative_system = load_collaborative_system()
+    
+    if not st.session_state.collaborative_system:
+        st.error("Failed to initialize collaborative system")
         return
     
-    action = st.session_state.quick_action
+    # Display agent status
+    display_agent_status()
     
-    if action == "calculator":
-        st.markdown('<div class="physics-card">', unsafe_allow_html=True)
-        st.markdown("### 🧮 Physics Calculator")
-        
-        calc_type = st.selectbox(
-            "Calculator Type",
-            ["Scientific Expression", "Vector Operations", "Quadratic Solver", "Physics Functions"]
+    # Collaboration controls
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        collaboration_mode = st.selectbox(
+            "🔄 Collaboration Mode",
+            ["research", "debate", "brainstorm", "teaching"],
+            index=["research", "debate", "brainstorm", "teaching"].index(st.session_state.collaboration_mode),
+            help="Choose how the agents should collaborate"
         )
-        
-        if calc_type == "Scientific Expression":
-            expression = st.text_input("Enter mathematical expression:", placeholder="sin(pi/4) + sqrt(2)")
-            if st.button("Calculate") and expression:
-                if st.session_state.physics_agent:
-                    try:
-                        result = st.session_state.physics_agent.run(
-                            f"Calculate this expression: {expression}",
-                            thread_id=st.session_state.thread_id
-                        )
-                        st.success(result)
-                    except Exception as e:
-                        st.error(f"Calculation error: {e}")
-        
-        elif calc_type == "Vector Operations":
-            col1, col2 = st.columns(2)
-            with col1:
-                vector1 = st.text_input("Vector 1 (comma-separated):", placeholder="1,2,3")
-                operation = st.selectbox("Operation", ["magnitude", "normalize", "dot", "cross", "add", "subtract"])
-            with col2:
-                vector2 = st.text_input("Vector 2 (if needed):", placeholder="4,5,6")
+        if collaboration_mode != st.session_state.collaboration_mode:
+            st.session_state.collaboration_mode = collaboration_mode
+    
+    with col2:
+        if st.button("🆕 New Session"):
+            st.session_state.current_session_id = None
+            st.session_state.chat_history = []
+            st.success("New session started!")
+            st.rerun()
+    
+    with col3:
+        session_count = len(st.session_state.active_sessions) if hasattr(st.session_state, 'active_sessions') else 0
+        st.metric("Active Sessions", session_count)
+    
+    # Mode descriptions
+    mode_descriptions = {
+        "research": "🔬 Systematic investigation with balanced analysis and exploration",
+        "debate": "⚡ Structured discussion where agents challenge ideas",
+        "brainstorm": "🧠 Creative exploration with minimal constraints",
+        "teaching": "📚 Educational explanations with expert knowledge and analogies"
+    }
+    st.info(mode_descriptions[collaboration_mode])
+    
+    # Quick Start Options
+    st.markdown("#### 🚀 Quick Start")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("🔬 Research a Topic", type="primary"):
+            st.session_state.quick_action = "research"
+    
+    with col2:
+        if st.button("💡 Generate Hypotheses", type="primary"):
+            st.session_state.quick_action = "hypotheses"
+    
+    with col3:
+        if st.button("⚡ Start a Debate", type="primary"):
+            st.session_state.quick_action = "debate"
+    
+    # Handle quick actions
+    if hasattr(st.session_state, 'quick_action'):
+        if st.session_state.quick_action == "research":
+            st.markdown("#### 🔬 Research Topic")
+            topic = st.text_input("Enter a physics topic to research collaboratively:")
+            context = st.text_area("Additional context (optional):")
             
-            if st.button("Calculate Vector Operation") and vector1:
-                if st.session_state.physics_agent:
-                    try:
-                        prompt = f"Perform vector operation: {operation} on vector {vector1}"
-                        if vector2 and operation in ["dot", "cross", "add", "subtract"]:
-                            prompt += f" and vector {vector2}"
-                        result = st.session_state.physics_agent.run(prompt, thread_id=st.session_state.thread_id)
-                        st.success(result)
-                    except Exception as e:
-                        st.error(f"Vector calculation error: {e}")
+            if st.button("Start Research") and topic:
+                start_collaborative_session(topic, "research", context)
+                del st.session_state.quick_action
+                st.rerun()
         
-        st.markdown('</div>', unsafe_allow_html=True)
+        elif st.session_state.quick_action == "hypotheses":
+            st.markdown("#### 💡 Generate Hypotheses")
+            topic = st.text_input("Enter a topic for hypothesis generation:")
+            num_hypotheses = st.slider("Number of hypotheses:", 1, 10, 3)
+            
+            if st.button("Generate Hypotheses") and topic:
+                generate_hypotheses_session(topic, num_hypotheses)
+                del st.session_state.quick_action
+                st.rerun()
+        
+        elif st.session_state.quick_action == "debate":
+            st.markdown("#### ⚡ Start Debate")
+            hypothesis = st.text_area("Enter a hypothesis to debate:")
+            topic = st.text_input("Topic context:")
+            
+            if st.button("Start Debate") and hypothesis and topic:
+                start_debate_session(hypothesis, topic)
+                del st.session_state.quick_action
+                st.rerun()
     
-    elif action == "constants":
-        st.markdown('<div class="physics-card">', unsafe_allow_html=True)
-        st.markdown("### 📚 Physics Constants")
-        
-        category = st.selectbox(
-            "Category",
-            ["fundamental", "particles", "electromagnetic", "thermodynamic", "astronomical", "all"]
+    # Chat Interface
+    display_chat_interface()
+
+def initialize_collaborative_session_state():
+    """Initialize session state variables for enhanced collaboration."""
+    if 'collaborative_system' not in st.session_state:
+        st.session_state.collaborative_system = None
+    if 'current_session_id' not in st.session_state:
+        st.session_state.current_session_id = None
+    if 'chat_history' not in st.session_state:
+        st.session_state.chat_history = []
+    if 'active_sessions' not in st.session_state:
+        st.session_state.active_sessions = {}
+    if 'collaboration_mode' not in st.session_state:
+        st.session_state.collaboration_mode = "research"
+    if 'agent_settings' not in st.session_state:
+        st.session_state.agent_settings = {
+            'difficulty_level': 'undergraduate',
+            'creativity_level': 'high',
+            'collaboration_style': 'balanced'
+        }
+
+def load_collaborative_system() -> Optional[CollaborativePhysicsSystem]:
+    """Load and initialize the collaborative physics system."""
+    try:
+        system = CollaborativePhysicsSystem(
+            difficulty_level=st.session_state.agent_settings['difficulty_level'],
+            creativity_level=st.session_state.agent_settings['creativity_level'],
+            collaboration_style=st.session_state.agent_settings['collaboration_style'],
+            memory_enabled=True
         )
-        
-        if st.button("List Constants"):
-            if st.session_state.physics_agent:
-                try:
-                    result = st.session_state.physics_agent.run(
-                        f"List physics constants in category: {category}",
-                        thread_id=st.session_state.thread_id
-                    )
-                    st.info(result)
-                except Exception as e:
-                    st.error(f"Error: {e}")
-        
-        constant_name = st.text_input("Look up specific constant:", placeholder="speed_of_light")
-        if st.button("Get Constant") and constant_name:
-            if st.session_state.physics_agent:
-                try:
-                    result = st.session_state.physics_agent.run(
-                        f"Get physics constant: {constant_name}",
-                        thread_id=st.session_state.thread_id
-                    )
-                    st.success(result)
-                except Exception as e:
-                    st.error(f"Error: {e}")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+        return system
+    except Exception as e:
+        st.error(f"Error loading collaborative system: {e}")
+        st.error(traceback.format_exc())
+        return None
+
+def display_agent_status():
+    """Display real-time agent status indicators."""
+    if not st.session_state.collaborative_system:
+        return
     
-    elif action == "converter":
-        st.markdown('<div class="physics-card">', unsafe_allow_html=True)
-        st.markdown("### 🔄 Unit Converter")
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            value = st.number_input("Value:", value=1.0)
-            from_unit = st.text_input("From unit:", placeholder="m")
-        with col2:
-            to_unit = st.text_input("To unit:", placeholder="ft")
-        with col3:
-            quantity = st.selectbox("Quantity (optional)", ["auto", "length", "mass", "time", "energy", "force"])
-        
-        if st.button("Convert Units") and from_unit and to_unit:
-            if st.session_state.physics_agent:
-                try:
-                    result = st.session_state.physics_agent.run(
-                        f"Convert {value} {from_unit} to {to_unit}",
-                        thread_id=st.session_state.thread_id
-                    )
-                    st.success(result)
-                except Exception as e:
-                    st.error(f"Conversion error: {e}")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("#### 🤖 Agent Status")
     
-    elif action == "equations":
-        st.markdown('<div class="physics-card">', unsafe_allow_html=True)
-        st.markdown("### 📖 Equation Lookup")
-        
-        equation_name = st.text_input("Equation name:", placeholder="newton's second law")
-        if st.button("Look Up Equation") and equation_name:
-            if st.session_state.physics_agent:
-                try:
-                    result = st.session_state.physics_agent.run(
-                        f"Look up physics equation: {equation_name}",
-                        thread_id=st.session_state.thread_id
-                    )
-                    st.info(result)
-                except Exception as e:
-                    st.error(f"Error: {e}")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+    col1, col2, col3, col4 = st.columns(4)
     
-    elif action == "arxiv":
-        st.markdown('<div class="physics-card">', unsafe_allow_html=True)
-        st.markdown("### 🔍 ArXiv Research")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            query = st.text_input("Search query:", placeholder="quantum entanglement")
-            max_results = st.slider("Max results:", 1, 10, 5)
-        with col2:
-            category = st.selectbox("Category", ["physics", "math", "cs", "all"])
-        
-        if st.button("Search ArXiv") and query:
-            if st.session_state.physics_agent:
-                try:
-                    result = st.session_state.physics_agent.run(
-                        f"Search ArXiv for: {query} (max {max_results} results, category: {category})",
-                        thread_id=st.session_state.thread_id
-                    )
-                    st.info(result)
-                except Exception as e:
-                    st.error(f"Search error: {e}")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+    with col1:
+        st.markdown("""
+        <div style="padding: 1rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; background: #f9fafb;">
+            <h4 style="margin: 0; color: #059669;">🔬 Physics Expert</h4>
+            <p style="margin: 0.5rem 0 0 0; color: #6b7280;">Ready</p>
+            <small style="color: #9ca3af;">Rigorous Analysis</small>
+        </div>
+        """, unsafe_allow_html=True)
     
-    # Clear the quick action
-    if st.button("❌ Close Quick Action"):
-        del st.session_state.quick_action
-        st.rerun()
+    with col2:
+        st.markdown("""
+        <div style="padding: 1rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; background: #f9fafb;">
+            <h4 style="margin: 0; color: #7c3aed;">💡 Hypothesis Generator</h4>
+            <p style="margin: 0.5rem 0 0 0; color: #6b7280;">Ready</p>
+            <small style="color: #9ca3af;">Creative Thinking</small>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown("""
+        <div style="padding: 1rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; background: #f9fafb;">
+            <h4 style="margin: 0; color: #0ea5e9;">🤝 Supervisor</h4>
+            <p style="margin: 0.5rem 0 0 0; color: #6b7280;">Ready</p>
+            <small style="color: #9ca3af;">Orchestrating</small>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col4:
+        session_count = len(st.session_state.active_sessions)
+        st.markdown(f"""
+        <div style="padding: 1rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; background: #f9fafb;">
+            <h4 style="margin: 0; color: #dc2626;">📊 Sessions</h4>
+            <p style="margin: 0.5rem 0 0 0; color: #6b7280;">{session_count}</p>
+            <small style="color: #9ca3af;">Active</small>
+        </div>
+        """, unsafe_allow_html=True)
 
 def display_chat_interface():
-    """Display the main chat interface."""
-    st.markdown("## 💬 Physics Chat")
-    
-    # Display chat history
-    chat_container = st.container()
-    with chat_container:
-        for i, message in enumerate(st.session_state.chat_history):
-            if message["role"] == "user":
-                st.markdown(f'<div class="chat-message user-message"><strong>You:</strong> {message["content"]}</div>', 
-                           unsafe_allow_html=True)
-            else:
-                st.markdown(f'<div class="chat-message assistant-message"><strong>PhysicsGPT:</strong> {message["content"]}</div>', 
-                           unsafe_allow_html=True)
+    """Display the collaborative chat interface."""
+    st.markdown("#### 💬 Collaborative Chat")
     
     # Chat input
-    user_input = st.chat_input("Ask me anything about physics...")
+    user_input = st.chat_input("Ask a question or continue the collaboration...")
     
     if user_input:
-        # Add user message to history
-        st.session_state.chat_history.append({"role": "user", "content": user_input})
-        
-        # Get agent response
-        if st.session_state.physics_agent:
-            try:
-                with st.spinner("PhysicsGPT is thinking..."):
-                    response = st.session_state.physics_agent.run(
-                        user_input,
-                        thread_id=st.session_state.thread_id
-                    )
-                
-                # Add response to history
-                st.session_state.chat_history.append({"role": "assistant", "content": response})
-                
-                # Update counters
-                if any(word in user_input.lower() for word in ['solve', 'calculate', 'problem']):
-                    st.session_state.problem_count += 1
-                if any(word in user_input.lower() for word in ['explain', 'what is', 'concept']):
-                    st.session_state.concept_count += 1
-                
-                st.rerun()
-            
-            except Exception as e:
-                st.error(f"Error getting response: {e}")
-                st.error(f"Traceback: {traceback.format_exc()}")
+        handle_user_input(user_input)
+    
+    # Display chat history
+    if st.session_state.chat_history:
+        for message in st.session_state.chat_history:
+            display_chat_message(message)
+    else:
+        st.info("Start a conversation by typing a message above or using the Quick Start buttons!")
 
-def display_example_problems():
-    """Display example physics problems for quick testing."""
-    st.markdown("## 🎯 Example Problems")
+def handle_user_input(user_input: str):
+    """Handle user input and generate collaborative response."""
+    if not st.session_state.collaborative_system:
+        st.session_state.collaborative_system = load_collaborative_system()
     
-    examples = [
-        {
-            "title": "Classical Mechanics",
-            "problem": "A ball is thrown upward with an initial velocity of 20 m/s. How high does it go and how long does it take to return to the ground?",
-            "icon": "🏀"
-        },
-        {
-            "title": "Electromagnetism", 
-            "problem": "What is the electric field strength 2 meters away from a point charge of 5 μC?",
-            "icon": "⚡"
-        },
-        {
-            "title": "Quantum Mechanics",
-            "problem": "Calculate the wavelength of an electron moving at 10% the speed of light.",
-            "icon": "🌊"
-        },
-        {
-            "title": "Thermodynamics",
-            "problem": "An ideal gas undergoes isothermal expansion from 1 L to 3 L at 300 K. If the initial pressure is 2 atm, what is the final pressure?",
-            "icon": "🌡️"
-        }
-    ]
+    if not st.session_state.collaborative_system:
+        st.error("Could not load collaborative system")
+        return
     
-    cols = st.columns(2)
-    for i, example in enumerate(examples):
-        with cols[i % 2]:
-            st.markdown(f'<div class="physics-concept">', unsafe_allow_html=True)
-            st.markdown(f"### {example['icon']} {example['title']}")
-            st.markdown(f"*{example['problem']}*")
-            if st.button(f"Try this problem", key=f"example_{i}"):
-                st.session_state.chat_history.append({"role": "user", "content": example['problem']})
-                st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+    # Add user message to history
+    st.session_state.chat_history.append({
+        "role": "user",
+        "content": user_input,
+        "timestamp": datetime.now()
+    })
+    
+    try:
+        if st.session_state.current_session_id:
+            # Continue existing session
+            response = st.session_state.collaborative_system.continue_collaboration(
+                session_id=st.session_state.current_session_id,
+                user_input=user_input,
+                mode=st.session_state.collaboration_mode
+            )
+            
+            if "error" in response:
+                st.error(response["error"])
+                return
+            
+            # Add response to history
+            st.session_state.chat_history.append({
+                "role": "collaborative",
+                "content": response["response"],
+                "timestamp": datetime.now()
+            })
+        else:
+            # Start new session
+            session = st.session_state.collaborative_system.start_collaborative_session(
+                topic=user_input,
+                mode=st.session_state.collaboration_mode
+            )
+            
+            st.session_state.current_session_id = session["session_info"]["session_id"]
+            st.session_state.active_sessions[st.session_state.current_session_id] = session["session_info"]
+            
+            # Add response to history
+            st.session_state.chat_history.append({
+                "role": "collaborative",
+                "content": session["response"],
+                "timestamp": datetime.now()
+            })
+        
+        # Log the collaboration to knowledge database
+        if st.session_state.knowledge_api:
+            asyncio.run(st.session_state.knowledge_api.log_event(
+                source="user",
+                event_type="collaboration_message",
+                payload={
+                    "user_input": user_input,
+                    "mode": st.session_state.collaboration_mode,
+                    "session_id": st.session_state.current_session_id
+                }
+            ))
+        
+        st.rerun()
+        
+    except Exception as e:
+        st.error(f"Error processing input: {e}")
+        st.session_state.chat_history.append({
+            "role": "error",
+            "content": f"Error: {str(e)}",
+            "timestamp": datetime.now()
+        })
+
+def display_chat_message(message: Dict[str, Any]):
+    """Display a chat message with appropriate styling."""
+    role = message["role"]
+    content = message["content"]
+    timestamp = message.get("timestamp", datetime.now())
+    
+    # Determine message styling based on role
+    if role == "user":
+        with st.chat_message("user"):
+            st.markdown(content)
+            st.caption(timestamp.strftime("%H:%M:%S"))
+    
+    elif role == "physics_expert" or "🔬" in str(content):
+        with st.chat_message("assistant", avatar="🔬"):
+            st.markdown(f"**Physics Expert**: {content}")
+            st.caption(timestamp.strftime("%H:%M:%S"))
+    
+    elif role == "hypothesis_generator" or "💡" in str(content):
+        with st.chat_message("assistant", avatar="💡"):
+            st.markdown(f"**Hypothesis Generator**: {content}")
+            st.caption(timestamp.strftime("%H:%M:%S"))
+    
+    elif role == "supervisor" or "🤝" in str(content):
+        with st.chat_message("assistant", avatar="🤝"):
+            st.markdown(f"**Supervisor**: {content}")
+            st.caption(timestamp.strftime("%H:%M:%S"))
+    
+    elif role == "collaborative" or "synthesis" in role:
+        with st.chat_message("assistant", avatar="🤖"):
+            st.markdown(f"**Collaborative Team**: {content}")
+            st.caption(timestamp.strftime("%H:%M:%S"))
+    
+    elif role == "error":
+        st.error(content)
+    
+    else:
+        with st.chat_message("assistant"):
+            st.markdown(content)
+            st.caption(timestamp.strftime("%H:%M:%S"))
+
+def start_collaborative_session(topic: str, mode: str, context: str = ""):
+    """Start a new collaborative session."""
+    if not st.session_state.collaborative_system:
+        st.session_state.collaborative_system = load_collaborative_system()
+    
+    if st.session_state.collaborative_system:
+        try:
+            session = st.session_state.collaborative_system.start_collaborative_session(
+                topic=topic,
+                mode=mode,
+                context=context
+            )
+            
+            st.session_state.current_session_id = session["session_info"]["session_id"]
+            st.session_state.active_sessions[st.session_state.current_session_id] = session["session_info"]
+            
+            # Add to chat history
+            st.session_state.chat_history = [
+                {"role": "user", "content": f"Research topic: {topic}", "timestamp": datetime.now()},
+                {"role": "collaborative", "content": session["response"], "timestamp": datetime.now()}
+            ]
+            
+            # Log to knowledge database
+            if st.session_state.knowledge_api:
+                asyncio.run(st.session_state.knowledge_api.log_event(
+                    source="user",
+                    event_type="collaboration_started",
+                    payload={
+                        "topic": topic,
+                        "mode": mode,
+                        "context": context,
+                        "session_id": st.session_state.current_session_id
+                    }
+                ))
+            
+            st.success(f"Started {mode} session: {topic}")
+            
+        except Exception as e:
+            st.error(f"Error starting session: {e}")
+
+def generate_hypotheses_session(topic: str, num_hypotheses: int):
+    """Generate hypotheses for a topic."""
+    if not st.session_state.collaborative_system:
+        st.session_state.collaborative_system = load_collaborative_system()
+    
+    if st.session_state.collaborative_system:
+        try:
+            hypotheses = st.session_state.collaborative_system.generate_hypotheses(
+                topic=topic,
+                num_hypotheses=num_hypotheses
+            )
+            
+            # Add to chat history
+            st.session_state.chat_history.append({
+                "role": "user", 
+                "content": f"Generate {num_hypotheses} hypotheses for: {topic}", 
+                "timestamp": datetime.now()
+            })
+            st.session_state.chat_history.append({
+                "role": "hypothesis_generator", 
+                "content": hypotheses, 
+                "timestamp": datetime.now()
+            })
+            
+            # Log to knowledge database
+            if st.session_state.knowledge_api:
+                asyncio.run(st.session_state.knowledge_api.log_event(
+                    source="hypothesis_generator",
+                    event_type="hypothesis_generation_session",
+                    payload={
+                        "topic": topic,
+                        "num_hypotheses": num_hypotheses,
+                        "hypotheses": hypotheses
+                    }
+                ))
+            
+            st.success("Hypotheses generated!")
+            
+        except Exception as e:
+            st.error(f"Error generating hypotheses: {e}")
+
+def start_debate_session(hypothesis: str, topic: str):
+    """Start a debate session."""
+    if not st.session_state.collaborative_system:
+        st.session_state.collaborative_system = load_collaborative_system()
+    
+    if st.session_state.collaborative_system:
+        try:
+            debate_result = st.session_state.collaborative_system.facilitate_debate(
+                hypothesis=hypothesis,
+                topic=topic
+            )
+            
+            # Add to chat history
+            st.session_state.chat_history.append({
+                "role": "user", 
+                "content": f"Debate hypothesis: {hypothesis} (Topic: {topic})", 
+                "timestamp": datetime.now()
+            })
+            st.session_state.chat_history.append({
+                "role": "supervisor", 
+                "content": debate_result, 
+                "timestamp": datetime.now()
+            })
+            
+            # Log to knowledge database
+            if st.session_state.knowledge_api:
+                asyncio.run(st.session_state.knowledge_api.log_event(
+                    source="supervisor",
+                    event_type="debate_session",
+                    payload={
+                        "hypothesis": hypothesis,
+                        "topic": topic,
+                        "result": debate_result
+                    }
+                ))
+            
+            st.success("Debate session started!")
+            
+        except Exception as e:
+            st.error(f"Error starting debate: {e}")
 
 def main():
     """Main application function."""
     initialize_session_state()
     
-    # Load physics agent if not already loaded
-    if st.session_state.physics_agent is None:
-        with st.spinner("Initializing PhysicsGPT..."):
-            st.session_state.physics_agent = load_physics_agent()
-    
-    # Check if agent loaded successfully
-    if st.session_state.physics_agent is None:
-        st.error("Failed to initialize PhysicsGPT. Please check your configuration.")
+    # Initialize Knowledge API
+    if not initialize_knowledge_api():
         st.stop()
     
-    # Create UI
-    create_header()
-    create_sidebar()
+    # Create main header
+    create_main_header()
     
-    # Main content area
-    col1, col2 = st.columns([2, 1])
+    # Display system metrics
+    display_system_metrics()
     
-    with col1:
-        # Display quick action interface if active
-        if 'quick_action' in st.session_state:
-            display_quick_action_interface()
-        else:
-            display_chat_interface()
+    # Main interface tabs
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "📚 Knowledge Base", 
+        "🧪 Hypotheses", 
+        "📋 Events Log", 
+        "💬 Collaborate",
+        "📊 Analytics"
+    ])
     
-    with col2:
-        display_example_problems()
+    with tab1:
+        display_knowledge_browser()
     
-    # Footer
-    st.markdown("---")
-    st.markdown("""
-    <div style="text-align: center; opacity: 0.7; padding: 1rem;">
-        <p>PhysicsGPT v1.0 | Built with ❤️ using Streamlit & LangChain</p>
-        <p>🔬 Advancing Physics Education Through AI</p>
-    </div>
-    """, unsafe_allow_html=True)
+    with tab2:
+        display_hypothesis_tracker()
+    
+    with tab3:
+        display_events_log()
+    
+    with tab4:
+        display_collaboration_interface()
+    
+    with tab5:
+        st.markdown("### 📊 System Analytics")
+        st.info("Advanced analytics dashboard coming soon!")
+        
+        # For now, show basic system info
+        if st.session_state.knowledge_api:
+            try:
+                analytics = asyncio.run(st.session_state.knowledge_api.get_system_analytics())
+                
+                # Status distribution
+                if analytics.get('status_distribution'):
+                    st.markdown("#### Hypothesis Status Distribution")
+                    status_df = pd.DataFrame(list(analytics['status_distribution'].items()), 
+                                           columns=['Status', 'Count'])
+                    fig = px.pie(status_df, values='Count', names='Status', 
+                               title='Hypothesis Status Distribution')
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                # Domain distribution
+                if analytics.get('domain_distribution'):
+                    st.markdown("#### Knowledge Domain Distribution")
+                    domain_df = pd.DataFrame(list(analytics['domain_distribution'].items()), 
+                                           columns=['Domain', 'Count'])
+                    fig = px.bar(domain_df, x='Domain', y='Count', 
+                               title='Knowledge by Domain')
+                    st.plotly_chart(fig, use_container_width=True)
+                
+            except Exception as e:
+                st.error(f"Failed to load analytics: {e}")
 
 if __name__ == "__main__":
     main() 
