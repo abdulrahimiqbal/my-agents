@@ -494,6 +494,29 @@ class MemoryStore:
         except Exception as e:
             print(f"❌ aput_writes failed: {e}")
             # Don't raise to avoid breaking the workflow
+    
+    async def aget_tuple(self, config: Dict[str, Any]) -> Optional[Tuple[Any, ...]]:
+        """
+        Async method to get tuple data for LangGraph checkpointer compatibility.
+        This is a compatibility method that delegates to the actual checkpointer.
+        
+        Args:
+            config: Configuration dictionary
+            
+        Returns:
+            Tuple data or None
+        """
+        try:
+            checkpointer = self.get_checkpointer()
+            if hasattr(checkpointer, 'aget_tuple'):
+                return await checkpointer.aget_tuple(config)
+            else:
+                # Fallback - return None
+                print(f"⚠️ aget_tuple called but not supported by checkpointer")
+                return None
+        except Exception as e:
+            print(f"❌ aget_tuple failed: {e}")
+            return None
 
 
 # Global memory store instance
