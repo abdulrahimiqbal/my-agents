@@ -1,4 +1,4 @@
-"""Hypothesis Generator Agent - Specialized agent for creative hypothesis generation and research gap identification."""
+"""Hypothesis Generator Agent - Specialized agent for creative physics thinking and hypothesis generation."""
 
 from typing import List, Optional, Dict, Any
 from langchain_core.messages import SystemMessage
@@ -8,10 +8,11 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from .base import BaseAgent
 from ..tools.hypothesis_tools import get_hypothesis_tools
 from ..tools.physics_research import get_physics_research_tools
+from ..database.knowledge_api import KnowledgeAPI
 
 
 class HypothesisGeneratorAgent(BaseAgent):
-    """Hypothesis generator agent specialized in creative physics research."""
+    """A specialized agent for generating creative hypotheses and alternative approaches in physics."""
     
     def __init__(self, 
                  creativity_level: str = "high",
@@ -25,7 +26,7 @@ class HypothesisGeneratorAgent(BaseAgent):
             creativity_level: Level of creativity (conservative, moderate, high, bold)
             exploration_scope: Scope of exploration (focused, broad, interdisciplinary)
             risk_tolerance: Tolerance for speculative ideas (low, medium, high)
-            memory_enabled: Whether to enable memory for the agent
+            memory_enabled: Whether to enable memory functionality
             **kwargs: Additional arguments for BaseAgent
         """
         self.creativity_level = creativity_level
@@ -33,6 +34,9 @@ class HypothesisGeneratorAgent(BaseAgent):
         self.risk_tolerance = risk_tolerance
         self.memory_enabled = memory_enabled
         self.system_message = self._create_hypothesis_system_message()
+        
+        # Initialize KnowledgeAPI for hypothesis tracking and event logging
+        self.knowledge_api = KnowledgeAPI()
         
         super().__init__(**kwargs)
     
@@ -149,7 +153,44 @@ Remember to maintain your creative approach while building on the conversation c
 """)
                 messages.insert(1, context_msg)
             
+            # Get the user's latest message for logging
+            user_message = state["messages"][-1] if state["messages"] else None
+            
             response = llm_with_tools.invoke(messages)
+            
+            # Log the hypothesis generator activity
+            if user_message:
+                import asyncio
+                try:
+                    # Determine event type based on message content
+                    message_content = user_message.content.lower()
+                    if any(word in message_content for word in ['generate', 'hypothesis', 'hypotheses']):
+                        event_type = "hypothesis_generation"
+                    elif any(word in message_content for word in ['gap', 'research gap', 'missing']):
+                        event_type = "research_gap_identification"
+                    elif any(word in message_content for word in ['alternative', 'different approach', 'other way']):
+                        event_type = "alternative_approach_proposal"
+                    elif any(word in message_content for word in ['experiment', 'test', 'design']):
+                        event_type = "experimental_design"
+                    else:
+                        event_type = "creative_thinking"
+                    
+                    # Log the event
+                    asyncio.create_task(self.knowledge_api.log_event(
+                        source="hypothesis_generator",
+                        event_type=event_type,
+                        payload={
+                            "user_query": user_message.content,
+                            "response_length": len(response.content),
+                            "creativity_level": self.creativity_level,
+                            "exploration_scope": self.exploration_scope,
+                            "risk_tolerance": self.risk_tolerance,
+                            "tools_used": bool(response.tool_calls) if hasattr(response, 'tool_calls') else False
+                        }
+                    ))
+                except Exception as e:
+                    print(f"⚠️ Event logging failed: {e}")
+            
             return {"messages": [response]}
         
         # Define tool node
@@ -168,7 +209,7 @@ Remember to maintain your creative approach while building on the conversation c
         builder.add_edge("tools", "hypothesis_assistant")
         
         # Compile with memory if enabled
-        if self.memory_enabled and self.memory:
+        if hasattr(self, 'memory_enabled') and self.memory_enabled and self.memory:
             return builder.compile(checkpointer=self.memory)
         else:
             return builder.compile()
@@ -177,7 +218,8 @@ Remember to maintain your creative approach while building on the conversation c
                           topic: str, 
                           context: str = "",
                           num_hypotheses: int = 3,
-                          thread_id: Optional[str] = None) -> str:
+                          thread_id: Optional[str] = None,
+                          session_id: Optional[str] = None) -> str:
         """Generate creative hypotheses for a physics topic.
         
         Args:
@@ -185,6 +227,7 @@ Remember to maintain your creative approach while building on the conversation c
             context: Additional context or constraints
             num_hypotheses: Number of hypotheses to generate
             thread_id: Optional thread ID for memory
+            session_id: Optional session ID for collaboration tracking
             
         Returns:
             Generated hypotheses with reasoning
@@ -201,9 +244,72 @@ Use your creative thinking tools to:
 5. Identify any risks or challenges in testing them
 
 Focus on ideas that might not be immediately obvious but are scientifically sound and potentially groundbreaking.
+
+For each hypothesis, please format your response as:
+**Hypothesis N:** [Clear statement of the hypothesis]
+**Reasoning:** [Explanation of the reasoning]
+**Testing:** [How it could be tested]
+**Impact:** [Potential impact if proven correct]
 """
         
-        return self.chat(prompt, thread_id=thread_id)
+        result = self.chat(prompt, thread_id=thread_id)
+        
+        # Parse and create hypotheses in the database
+        import asyncio
+        import re
+        try:
+            # Extract individual hypotheses from the response
+            hypothesis_pattern = r'\*\*Hypothesis \d+:\*\*\s*(.+?)(?=\*\*Reasoning:|$)'
+            hypotheses = re.findall(hypothesis_pattern, result, re.DOTALL)
+            
+            # Create each hypothesis in the database
+            for i, hypothesis_text in enumerate(hypotheses):
+                if hypothesis_text.strip():
+                    # Determine confidence based on creativity level
+                    confidence_map = {
+                        "conservative": 0.7,
+                        "moderate": 0.6,
+                        "high": 0.5,
+                        "bold": 0.4
+                    }
+                    initial_confidence = confidence_map.get(self.creativity_level, 0.5)
+                    
+                    # Create hypothesis in database
+                    asyncio.create_task(self.knowledge_api.propose_hypothesis(
+                        statement=hypothesis_text.strip(),
+                        created_by="hypothesis_generator",
+                        thread_id=thread_id,
+                        session_id=session_id,
+                        initial_confidence=initial_confidence,
+                        domain=self._extract_domain_from_topic(topic)
+                    ))
+                    
+        except Exception as e:
+            print(f"⚠️ Hypothesis database creation failed: {e}")
+        
+        return result
+    
+    def _extract_domain_from_topic(self, topic: str) -> str:
+        """Extract physics domain from topic string."""
+        topic_lower = topic.lower()
+        
+        # Domain keywords mapping
+        domain_keywords = {
+            "quantum": ["quantum", "qubit", "entanglement", "superposition", "wave function"],
+            "classical": ["classical", "newton", "mechanics", "motion", "force"],
+            "thermodynamics": ["thermodynamics", "heat", "temperature", "entropy", "energy"],
+            "electromagnetism": ["electromagnetic", "electric", "magnetic", "field", "maxwell"],
+            "relativity": ["relativity", "spacetime", "einstein", "lorentz", "minkowski"],
+            "particle": ["particle", "quark", "lepton", "boson", "standard model"],
+            "astrophysics": ["astrophysics", "cosmology", "star", "galaxy", "universe"],
+            "condensed_matter": ["condensed matter", "solid state", "crystal", "material"]
+        }
+        
+        for domain, keywords in domain_keywords.items():
+            if any(keyword in topic_lower for keyword in keywords):
+                return domain
+        
+        return "general"
     
     def identify_research_gaps(self, 
                              field: str, 
@@ -234,6 +340,31 @@ Focus on gaps that could lead to significant advances or new understanding in ph
 """
         
         return self.chat(prompt, thread_id=thread_id)
+    
+    def get_agent_info(self) -> Dict[str, Any]:
+        """Get information about this hypothesis generator agent."""
+        return {
+            "name": "HypothesisGeneratorAgent",
+            "type": "hypothesis_generator",
+            "description": "A specialized agent for generating creative hypotheses and alternative approaches in physics",
+            "capabilities": [
+                "Creative hypothesis generation",
+                "Research gap identification",
+                "Alternative approach proposal",
+                "Experimental design",
+                "Creative collaboration"
+            ],
+            "creativity_level": self.creativity_level,
+            "exploration_scope": self.exploration_scope,
+            "risk_tolerance": self.risk_tolerance,
+            "tools": [
+                "Hypothesis generation frameworks",
+                "Research gap analysis",
+                "Alternative approach brainstorming",
+                "Experimental design templates"
+            ],
+            "version": "1.0.0"
+        }
     
     def propose_alternative_approaches(self, 
                                      problem: str, 
@@ -326,28 +457,3 @@ Your goal is to complement the expert's knowledge with creative thinking and nov
 """
         
         return self.chat(prompt, thread_id=thread_id) 
-    
-    def get_agent_info(self) -> Dict[str, Any]:
-        """Get information about this hypothesis generator agent."""
-        return {
-            "name": "HypothesisGeneratorAgent",
-            "type": "hypothesis_generator",
-            "description": "A specialized agent for generating creative hypotheses and alternative approaches in physics",
-            "capabilities": [
-                "Creative hypothesis generation",
-                "Research gap identification",
-                "Alternative approach proposal",
-                "Experimental design",
-                "Creative collaboration"
-            ],
-            "creativity_level": self.creativity_level,
-            "exploration_scope": self.exploration_scope,
-            "risk_tolerance": self.risk_tolerance,
-            "tools": [
-                "Hypothesis generation frameworks",
-                "Research gap analysis",
-                "Alternative approach brainstorming",
-                "Experimental design templates"
-            ],
-            "version": "1.0.0"
-        } 

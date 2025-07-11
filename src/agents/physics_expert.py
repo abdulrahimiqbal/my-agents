@@ -10,6 +10,7 @@ from ..tools.physics_calculator import get_physics_calculator_tools
 from ..tools.physics_research import get_physics_research_tools
 from ..tools.physics_constants import get_physics_constants_tools
 from ..tools.unit_converter import get_unit_converter_tools
+from ..database.knowledge_api import KnowledgeAPI
 
 
 class PhysicsExpertAgent(BaseAgent):
@@ -25,13 +26,16 @@ class PhysicsExpertAgent(BaseAgent):
         Args:
             difficulty_level: Target difficulty (high_school, undergraduate, graduate, research)
             specialty: Physics specialty (mechanics, electromagnetism, quantum, etc.)
-            memory_enabled: Whether to enable memory for the agent
+            memory_enabled: Whether to enable memory functionality
             **kwargs: Additional arguments for BaseAgent
         """
         self.difficulty_level = difficulty_level
         self.specialty = specialty
         self.memory_enabled = memory_enabled
         self.system_message = self._create_physics_system_message()
+        
+        # Initialize KnowledgeAPI for event logging and knowledge management
+        self.knowledge_api = KnowledgeAPI()
         
         super().__init__(**kwargs)
     
@@ -134,7 +138,41 @@ Remember to maintain consistency with the established difficulty level and build
 """)
                 messages.insert(1, context_msg)
             
+            # Get the user's latest message for logging
+            user_message = state["messages"][-1] if state["messages"] else None
+            
             response = llm_with_tools.invoke(messages)
+            
+            # Log the physics expert activity
+            if user_message:
+                import asyncio
+                try:
+                    # Determine event type based on message content
+                    message_content = user_message.content.lower()
+                    if any(word in message_content for word in ['solve', 'calculate', 'problem']):
+                        event_type = "problem_solving"
+                    elif any(word in message_content for word in ['explain', 'what is', 'how does']):
+                        event_type = "concept_explanation"
+                    elif any(word in message_content for word in ['evaluate', 'hypothesis', 'theory']):
+                        event_type = "hypothesis_evaluation"
+                    else:
+                        event_type = "physics_consultation"
+                    
+                    # Log the event
+                    asyncio.create_task(self.knowledge_api.log_event(
+                        source="physics_expert",
+                        event_type=event_type,
+                        payload={
+                            "user_query": user_message.content,
+                            "response_length": len(response.content),
+                            "difficulty_level": self.difficulty_level,
+                            "specialty": self.specialty,
+                            "tools_used": bool(response.tool_calls) if hasattr(response, 'tool_calls') else False
+                        }
+                    ))
+                except Exception as e:
+                    print(f"⚠️ Event logging failed: {e}")
+            
             return {"messages": [response]}
         
         # Define tool node
@@ -153,7 +191,7 @@ Remember to maintain consistency with the established difficulty level and build
         builder.add_edge("tools", "physics_assistant")
         
         # Compile with memory if enabled
-        if self.memory_enabled and self.memory:
+        if hasattr(self, 'memory_enabled') and self.memory_enabled and self.memory:
             return builder.compile(checkpointer=self.memory)
         else:
             return builder.compile()
@@ -247,13 +285,15 @@ Provide:
     def evaluate_hypothesis(self, 
                           hypothesis: str, 
                           context: str = "",
-                          thread_id: Optional[str] = None) -> str:
+                          thread_id: Optional[str] = None,
+                          session_id: Optional[str] = None) -> str:
         """Evaluate a physics hypothesis for scientific validity and feasibility.
         
         Args:
             hypothesis: The hypothesis to evaluate
             context: Additional context about the hypothesis
             thread_id: Optional thread ID for memory
+            session_id: Optional session ID for collaboration tracking
             
         Returns:
             Detailed evaluation with scientific assessment
@@ -275,7 +315,27 @@ As a physics expert, provide a comprehensive evaluation including:
 Be rigorous but constructive in your analysis, and suggest improvements or refinements if needed.
 """
         
-        return self.chat(prompt, thread_id=thread_id)
+        result = self.chat(prompt, thread_id=thread_id)
+        
+        # Log the hypothesis evaluation event
+        import asyncio
+        try:
+            asyncio.create_task(self.knowledge_api.log_event(
+                source="physics_expert",
+                event_type="hypothesis_evaluation",
+                payload={
+                    "hypothesis": hypothesis,
+                    "context": context,
+                    "evaluation_length": len(result),
+                    "difficulty_level": self.difficulty_level
+                },
+                thread_id=thread_id,
+                session_id=session_id
+            ))
+        except Exception as e:
+            print(f"⚠️ Hypothesis evaluation logging failed: {e}")
+        
+        return result
     
     def peer_review_analysis(self, 
                            analysis: str, 
@@ -377,17 +437,17 @@ As a physics expert, evaluate:
 Provide specific suggestions for improving the experimental design while maintaining scientific rigor.
 """
         
-        return self.chat(prompt, thread_id=thread_id) 
+        return self.chat(prompt, thread_id=thread_id)
     
     def get_agent_info(self) -> Dict[str, Any]:
         """Get information about this physics expert agent."""
         return {
             "name": "PhysicsExpertAgent",
-            "type": "physics_expert", 
+            "type": "physics_expert",
             "description": "A specialized physics expert agent with comprehensive physics knowledge",
             "capabilities": [
                 "Physics problem solving",
-                "Concept explanation", 
+                "Concept explanation",
                 "Hypothesis evaluation",
                 "Peer review analysis",
                 "Experimental design validation",
@@ -397,7 +457,7 @@ Provide specific suggestions for improving the experimental design while maintai
             "specialty": self.specialty,
             "tools": [
                 "Physics calculator",
-                "Research paper search", 
+                "Research paper search",
                 "Physics constants database",
                 "Unit converter"
             ],
