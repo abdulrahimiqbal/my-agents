@@ -1008,22 +1008,41 @@ def main():
     if not initialize_knowledge_api():
         st.stop()
     
-    # Interface selection at the top
-    st.markdown("""
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 1rem; border-radius: 10px; margin-bottom: 1rem;">
-        <h2 style="color: white; text-align: center; margin: 0;">🚀 PhysicsGPT Interface Hub</h2>
-    </div>
-    """, unsafe_allow_html=True)
+    # Interface selection in sidebar
+    with st.sidebar:
+        st.markdown("### 🚀 PhysicsGPT Interfaces")
+        
+        interface_choice = st.selectbox(
+            "Choose Interface:",
+            ["🧪 Knowledge Lab", "🎨 Agent Canvas"],
+            index=0,
+            key="interface_selector"
+        )
+        
+        st.markdown("---")
+        st.markdown("### 💡 Interface Guide")
+        
+        if interface_choice == "🧪 Knowledge Lab":
+            st.markdown("""
+            **Knowledge Lab** - Comprehensive research management
+            - 📚 Browse knowledge base
+            - 🧪 Track hypotheses lifecycle  
+            - 📋 View event logs
+            - 💬 Collaborate with agents
+            - 📊 Analytics dashboard
+            """)
+        elif interface_choice == "🎨 Agent Canvas":
+            st.markdown("""
+            **Agent Canvas** - Visual agent workspace
+            - 🎨 Interactive agent cards
+            - ⚡ Direct agent interaction
+            - 🤝 Real-time collaboration
+            - 📊 Session analytics
+            - 🔬 Physics tools integration
+            """)
     
-    # Interface tabs
-    interface_tab1, interface_tab2, interface_tab3 = st.tabs([
-        "🧪 Knowledge Lab", 
-        "🎨 Agent Canvas", 
-        "🤖 Collaborative"
-    ])
-    
-    with interface_tab1:
-        # Original Knowledge Lab Interface
+    # Route to selected interface
+    if interface_choice == "🧪 Knowledge Lab":
         # Create main header
         create_main_header()
         
@@ -1081,98 +1100,262 @@ def main():
                 except Exception as e:
                     st.error(f"Failed to load analytics: {e}")
     
-    with interface_tab2:
+    elif interface_choice == "🎨 Agent Canvas":
         # Agent Canvas Interface
-        st.markdown("""
-        <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 2rem; border-radius: 15px; color: white; text-align: center; margin-bottom: 2rem;">
-            <h1>🎨 Agent Canvas</h1>
-            <p>Interactive Multi-Agent Physics Research Platform</p>
-        </div>
-        """, unsafe_allow_html=True)
+        display_agent_canvas()
+
+def display_agent_canvas():
+    """Display the Agent Canvas interface."""
+    # Initialize canvas-specific session state
+    if 'canvas_agents' not in st.session_state:
+        st.session_state.canvas_agents = {}
+    if 'selected_agent' not in st.session_state:
+        st.session_state.selected_agent = None
+    if 'agent_chat_history' not in st.session_state:
+        st.session_state.agent_chat_history = {
+            'physics_expert': [],
+            'hypothesis_generator': [],
+            'supervisor': []
+        }
+    if 'agent_status' not in st.session_state:
+        st.session_state.agent_status = {
+            'physics_expert': 'inactive',
+            'hypothesis_generator': 'inactive',
+            'supervisor': 'inactive'
+        }
+    
+    # Canvas header
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                padding: 2rem; border-radius: 20px; margin-bottom: 2rem; 
+                color: white; text-align: center;">
+        <h1>🎨 PhysicsGPT Agent Canvas</h1>
+        <p>Interactive Multi-Agent Physics Research Platform</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Agent selection cards
+    st.markdown("### 🤖 Select an Agent")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("🔬 Physics Expert", key="select_physics", use_container_width=True):
+            st.session_state.selected_agent = 'physics_expert'
+            st.session_state.agent_status['physics_expert'] = 'active'
+            st.rerun()
         
-        # Simple agent canvas implementation
-        st.markdown("### 🤖 Physics Agents")
+        # Agent card
+        status = st.session_state.agent_status.get('physics_expert', 'inactive')
+        chat_count = len(st.session_state.agent_chat_history.get('physics_expert', []))
         
-        col1, col2, col3 = st.columns(3)
+        card_style = "border: 2px solid #10b981;" if st.session_state.selected_agent == 'physics_expert' else "border: 2px solid #e5e7eb;"
         
-        with col1:
-            st.markdown("""
-            <div style="background: white; padding: 1.5rem; border-radius: 15px; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,0.1);">
+        st.markdown(f"""
+        <div style="background: white; border-radius: 15px; padding: 1.5rem; 
+                    margin: 1rem 0; box-shadow: 0 8px 32px rgba(0,0,0,0.1); 
+                    {card_style} transition: all 0.3s ease;">
+            <div style="text-align: center;">
                 <div style="font-size: 3rem; margin-bottom: 1rem;">🔬</div>
                 <h3>Physics Expert</h3>
-                <p>Rigorous scientific analysis and validation</p>
+                <p style="color: #6b7280;">Rigorous scientific analysis</p>
+                <div style="margin: 1rem 0;">
+                    <span style="background: #10b981; color: white; padding: 0.25rem 0.75rem; 
+                                 border-radius: 20px; font-size: 0.8rem;">
+                        {status.title()}
+                    </span>
+                </div>
+                <div style="color: #6b7280; font-size: 0.9rem;">
+                    💬 {chat_count} chats • ⚡ Ready
+                </div>
             </div>
-            """, unsafe_allow_html=True)
-            
-            if st.button("💬 Chat with Physics Expert", use_container_width=True):
-                st.info("🔬 Physics Expert ready for questions!")
-        
-        with col2:
-            st.markdown("""
-            <div style="background: white; padding: 1.5rem; border-radius: 15px; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,0.1);">
-                <div style="font-size: 3rem; margin-bottom: 1rem;">💡</div>
-                <h3>Hypothesis Generator</h3>
-                <p>Creative idea generation and exploration</p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            if st.button("🧪 Generate Hypothesis", use_container_width=True):
-                st.info("💡 Hypothesis Generator ready to create!")
-        
-        with col3:
-            st.markdown("""
-            <div style="background: white; padding: 1.5rem; border-radius: 15px; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,0.1);">
-                <div style="font-size: 3rem; margin-bottom: 1rem;">🤝</div>
-                <h3>Supervisor</h3>
-                <p>Orchestrates collaboration and coordination</p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            if st.button("👥 Start Collaboration", use_container_width=True):
-                st.info("🤝 Supervisor ready to coordinate!")
-        
-        # Quick actions
-        st.markdown("---")
-        st.markdown("### ⚡ Quick Actions")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            if st.button("🧪 Quick Hypothesis", use_container_width=True):
-                st.balloons()
-                st.success("🎉 Generated hypothesis about quantum entanglement applications!")
-        
-        with col2:
-            if st.button("🔬 Physics Analysis", use_container_width=True):
-                st.success("📊 Analyzing electromagnetic wave propagation...")
-        
-        with col3:
-            if st.button("📊 Research Summary", use_container_width=True):
-                st.success("📈 Compiling research progress summary...")
-        
-        # Note about full canvas
-        st.markdown("---")
-        st.info("""
-        💡 **Note**: This is a simplified Agent Canvas. For the full interactive experience with:
-        - Advanced animations and visual effects
-        - Real-time collaboration visualization  
-        - User preferences and customization
-        - Session analytics and tracking
-        
-        The complete Agent Canvas is available in `streamlit_canvas.py` for local testing.
-        """)
-    
-    with interface_tab3:
-        # Collaborative Interface
-        st.markdown("""
-        <div style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); padding: 2rem; border-radius: 15px; color: white; text-align: center; margin-bottom: 2rem;">
-            <h1>🤖 Collaborative Agents</h1>
-            <p>Multi-Agent Physics Research Collaboration</p>
         </div>
         """, unsafe_allow_html=True)
+    
+    with col2:
+        if st.button("💡 Hypothesis Generator", key="select_hypothesis", use_container_width=True):
+            st.session_state.selected_agent = 'hypothesis_generator'
+            st.session_state.agent_status['hypothesis_generator'] = 'active'
+            st.rerun()
         
-        # Use the existing collaboration interface from the Knowledge Lab
-        display_collaboration_interface()
+        # Agent card
+        status = st.session_state.agent_status.get('hypothesis_generator', 'inactive')
+        chat_count = len(st.session_state.agent_chat_history.get('hypothesis_generator', []))
+        
+        card_style = "border: 2px solid #f59e0b;" if st.session_state.selected_agent == 'hypothesis_generator' else "border: 2px solid #e5e7eb;"
+        
+        st.markdown(f"""
+        <div style="background: white; border-radius: 15px; padding: 1.5rem; 
+                    margin: 1rem 0; box-shadow: 0 8px 32px rgba(0,0,0,0.1); 
+                    {card_style} transition: all 0.3s ease;">
+            <div style="text-align: center;">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">💡</div>
+                <h3>Hypothesis Generator</h3>
+                <p style="color: #6b7280;">Creative idea generation</p>
+                <div style="margin: 1rem 0;">
+                    <span style="background: #f59e0b; color: white; padding: 0.25rem 0.75rem; 
+                                 border-radius: 20px; font-size: 0.8rem;">
+                        {status.title()}
+                    </span>
+                </div>
+                <div style="color: #6b7280; font-size: 0.9rem;">
+                    💬 {chat_count} chats • ⚡ Ready
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        if st.button("🤝 Supervisor", key="select_supervisor", use_container_width=True):
+            st.session_state.selected_agent = 'supervisor'
+            st.session_state.agent_status['supervisor'] = 'active'
+            st.rerun()
+        
+        # Agent card
+        status = st.session_state.agent_status.get('supervisor', 'inactive')
+        chat_count = len(st.session_state.agent_chat_history.get('supervisor', []))
+        
+        card_style = "border: 2px solid #8b5cf6;" if st.session_state.selected_agent == 'supervisor' else "border: 2px solid #e5e7eb;"
+        
+        st.markdown(f"""
+        <div style="background: white; border-radius: 15px; padding: 1.5rem; 
+                    margin: 1rem 0; box-shadow: 0 8px 32px rgba(0,0,0,0.1); 
+                    {card_style} transition: all 0.3s ease;">
+            <div style="text-align: center;">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">🤝</div>
+                <h3>Supervisor</h3>
+                <p style="color: #6b7280;">Collaboration orchestration</p>
+                <div style="margin: 1rem 0;">
+                    <span style="background: #8b5cf6; color: white; padding: 0.25rem 0.75rem; 
+                                 border-radius: 20px; font-size: 0.8rem;">
+                        {status.title()}
+                    </span>
+                </div>
+                <div style="color: #6b7280; font-size: 0.9rem;">
+                    💬 {chat_count} chats • ⚡ Ready
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Chat interface
+    if st.session_state.selected_agent:
+        st.markdown("---")
+        agent_names = {
+            'physics_expert': '🔬 Physics Expert',
+            'hypothesis_generator': '💡 Hypothesis Generator',
+            'supervisor': '🤝 Supervisor'
+        }
+        
+        st.markdown(f"### 💬 Chat with {agent_names[st.session_state.selected_agent]}")
+        
+        # Chat history
+        chat_container = st.container()
+        with chat_container:
+            for message in st.session_state.agent_chat_history[st.session_state.selected_agent]:
+                if message['role'] == 'user':
+                    with st.chat_message("user"):
+                        st.markdown(message['content'])
+                        st.caption(message['timestamp'].strftime("%H:%M:%S"))
+                else:
+                    with st.chat_message("assistant"):
+                        st.markdown(message['content'])
+                        st.caption(message['timestamp'].strftime("%H:%M:%S"))
+        
+        # Chat input
+        user_input = st.chat_input("Ask your physics question...")
+        
+        if user_input:
+            # Add user message
+            st.session_state.agent_chat_history[st.session_state.selected_agent].append({
+                'role': 'user',
+                'content': user_input,
+                'timestamp': datetime.now()
+            })
+            
+            # Get agent response (simplified for now)
+            with st.spinner(f"{agent_names[st.session_state.selected_agent]} is thinking..."):
+                try:
+                    # Initialize collaborative system for agent responses
+                    if not st.session_state.collaborative_system:
+                        st.session_state.collaborative_system = CollaborativePhysicsSystem()
+                    
+                    # Get response based on selected agent
+                    if st.session_state.selected_agent == 'physics_expert':
+                        response = f"🔬 **Physics Expert Analysis**: {user_input}\n\nThis is a rigorous scientific analysis of your question. The physics expert would provide detailed explanations, mathematical derivations, and experimental considerations."
+                    elif st.session_state.selected_agent == 'hypothesis_generator':
+                        response = f"💡 **Creative Hypothesis**: Based on '{user_input}'\n\nHere's an innovative hypothesis that explores new possibilities and creative connections in physics."
+                    else:  # supervisor
+                        response = f"🤝 **Supervisor Coordination**: Regarding '{user_input}'\n\nThe supervisor would coordinate between agents and provide structured research guidance."
+                    
+                    # Add agent response
+                    st.session_state.agent_chat_history[st.session_state.selected_agent].append({
+                        'role': 'agent',
+                        'content': response,
+                        'timestamp': datetime.now()
+                    })
+                    
+                    # Log interaction
+                    if st.session_state.knowledge_api:
+                        try:
+                            asyncio.run(st.session_state.knowledge_api.log_event(
+                                source=f"canvas_{st.session_state.selected_agent}",
+                                event_type="agent_interaction",
+                                payload={
+                                    "user_input": user_input,
+                                    "response_length": len(response),
+                                    "agent_type": st.session_state.selected_agent
+                                }
+                            ))
+                        except Exception as e:
+                            st.error(f"Failed to log interaction: {e}")
+                    
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"❌ Error getting response: {e}")
+    
+    else:
+        st.info("👆 Select an agent above to start chatting!")
+    
+    # Quick actions
+    st.markdown("---")
+    st.markdown("### ⚡ Quick Actions")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("🧪 Generate Hypothesis", use_container_width=True):
+            st.session_state.selected_agent = 'hypothesis_generator'
+            st.session_state.agent_status['hypothesis_generator'] = 'active'
+            st.session_state.agent_chat_history['hypothesis_generator'].append({
+                'role': 'user',
+                'content': "Generate an innovative hypothesis about quantum mechanics applications",
+                'timestamp': datetime.now()
+            })
+            st.rerun()
+    
+    with col2:
+        if st.button("🔬 Physics Analysis", use_container_width=True):
+            st.session_state.selected_agent = 'physics_expert'
+            st.session_state.agent_status['physics_expert'] = 'active'
+            st.session_state.agent_chat_history['physics_expert'].append({
+                'role': 'user',
+                'content': "Analyze the physics behind electromagnetic wave propagation",
+                'timestamp': datetime.now()
+            })
+            st.rerun()
+    
+    with col3:
+        if st.button("🤝 Start Collaboration", use_container_width=True):
+            st.session_state.selected_agent = 'supervisor'
+            st.session_state.agent_status['supervisor'] = 'active'
+            st.session_state.agent_chat_history['supervisor'].append({
+                'role': 'user',
+                'content': "Let's start a collaborative research session on quantum entanglement",
+                'timestamp': datetime.now()
+            })
+            st.rerun()
 
 if __name__ == "__main__":
     main() 
