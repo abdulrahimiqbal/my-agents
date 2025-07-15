@@ -396,13 +396,7 @@ class PhysicsGPTCrew:
             tasks=tasks,
             process=Process.sequential,  # Can be changed to hierarchical if needed
             verbose=True,
-            memory=True,  # Enable memory for better collaboration
-            embedder={
-                "provider": "openai",
-                "config": {
-                    "model": "text-embedding-3-small"
-                }
-            }
+            memory=False,  # Disable memory to avoid ChromaDB issues on Streamlit Cloud
         )
         
         return crew

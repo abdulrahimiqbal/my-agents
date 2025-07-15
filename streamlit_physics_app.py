@@ -6,10 +6,28 @@ Beautiful, responsive UI for the 10-agent physics research system.
 
 import streamlit as st
 import time
-from physics_crew_system import PhysicsGPTCrew
-import plotly.graph_objects as go
-import plotly.express as px
+import sys
+import os
 from datetime import datetime
+
+# Add current directory to path for imports
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# Try to import required modules with error handling
+try:
+    from physics_crew_system import PhysicsGPTCrew
+    PHYSICS_SYSTEM_AVAILABLE = True
+except ImportError as e:
+    st.error(f"❌ Failed to import PhysicsGPTCrew: {e}")
+    st.error("Please check that all dependencies are installed correctly.")
+    PHYSICS_SYSTEM_AVAILABLE = False
+
+try:
+    import plotly.graph_objects as go
+    import plotly.express as px
+    PLOTLY_AVAILABLE = True
+except ImportError:
+    PLOTLY_AVAILABLE = False
 
 # Page configuration
 st.set_page_config(
@@ -57,8 +75,17 @@ st.markdown("""
 
 # Initialize session state
 if 'physics_crew' not in st.session_state:
-    with st.spinner("🚀 Initializing PhysicsGPT system..."):
-        st.session_state.physics_crew = PhysicsGPTCrew()
+    if PHYSICS_SYSTEM_AVAILABLE:
+        with st.spinner("🚀 Initializing PhysicsGPT system..."):
+            try:
+                st.session_state.physics_crew = PhysicsGPTCrew()
+                st.session_state.analysis_history = []
+                st.session_state.system_ready = True
+            except Exception as e:
+                st.error(f"❌ Failed to initialize PhysicsGPT: {e}")
+                st.session_state.system_ready = False
+    else:
+        st.session_state.system_ready = False
         st.session_state.analysis_history = []
 
 def main():
