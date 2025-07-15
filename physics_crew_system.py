@@ -7,6 +7,15 @@ Professional physics research system with specialized AI agents.
 import os
 import sys
 from typing import Dict, Any, List
+
+# Fix SQLite version issue for Streamlit Cloud BEFORE importing anything else
+try:
+    __import__('pysqlite3')
+    import sys
+    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+except ImportError:
+    pass
+
 from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, Process
 from langchain_openai import ChatOpenAI

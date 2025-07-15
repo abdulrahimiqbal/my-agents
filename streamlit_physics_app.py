@@ -4,6 +4,14 @@ PhysicsGPT - Modern Streamlit Interface
 Beautiful, responsive UI for the 10-agent physics research system.
 """
 
+# Fix SQLite version issue for Streamlit Cloud BEFORE importing anything else
+try:
+    __import__('pysqlite3')
+    import sys
+    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+except ImportError:
+    pass
+
 import streamlit as st
 import time
 import sys
