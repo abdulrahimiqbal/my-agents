@@ -19,6 +19,8 @@ except ImportError:
 from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, Process
 from langchain_openai import ChatOpenAI
+from agent_monitor import agent_monitor, parse_agent_output
+from monitored_llm import create_monitored_llm
 
 # Load environment variables
 load_dotenv()
@@ -26,24 +28,38 @@ load_dotenv()
 class PhysicsGPTCrew:
     """Clean, professional multi-agent physics research system using CrewAI."""
     
-    def __init__(self):
-        """Initialize the PhysicsGPT crew with specialized agents."""
+    def __init__(self, enable_monitoring=False):
+        """Initialize the PhysicsGPT crew with specialized agents.
+        
+        Args:
+            enable_monitoring: If True, use monitored LLMs to capture conversations
+        """
+        self.enable_monitoring = enable_monitoring
         
         # Initialize LLMs with different temperatures for different purposes
-        self.precise_llm = ChatOpenAI(
-            model=os.getenv("PHYSICS_AGENT_MODEL", "gpt-4o-mini"),
-            temperature=0.1  # Low temperature for accuracy
-        )
+        model_name = os.getenv("PHYSICS_AGENT_MODEL", "gpt-4o-mini")
         
-        self.creative_llm = ChatOpenAI(
-            model=os.getenv("PHYSICS_AGENT_MODEL", "gpt-4o-mini"),
-            temperature=0.7  # High temperature for creativity
-        )
-        
-        self.mathematical_llm = ChatOpenAI(
-            model=os.getenv("PHYSICS_AGENT_MODEL", "gpt-4o-mini"),
-            temperature=0.05  # Very low for mathematical precision
-        )
+        if enable_monitoring:
+            # Use monitored LLMs that capture agent conversations
+            self.precise_llm = create_monitored_llm("physics_expert", temperature=0.1, model=model_name)
+            self.creative_llm = create_monitored_llm("hypothesis_generator", temperature=0.7, model=model_name)
+            self.mathematical_llm = create_monitored_llm("mathematical_analyst", temperature=0.05, model=model_name)
+        else:
+            # Use standard LLMs
+            self.precise_llm = ChatOpenAI(
+                model=model_name,
+                temperature=0.1  # Low temperature for accuracy
+            )
+            
+            self.creative_llm = ChatOpenAI(
+                model=model_name,
+                temperature=0.7  # High temperature for creativity
+            )
+            
+            self.mathematical_llm = ChatOpenAI(
+                model=model_name,
+                temperature=0.05  # Very low for mathematical precision
+            )
         
         # Create specialized physics agents
         self.agents = self._create_agents()
