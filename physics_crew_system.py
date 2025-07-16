@@ -40,26 +40,29 @@ class PhysicsGPTCrew:
         model_name = os.getenv("PHYSICS_AGENT_MODEL", "gpt-4o-mini")
         
         if enable_monitoring:
-            # Use monitored LLMs that capture agent conversations
-            self.precise_llm = create_monitored_llm("physics_expert", temperature=0.1, model=model_name)
-            self.creative_llm = create_monitored_llm("hypothesis_generator", temperature=0.7, model=model_name)
-            self.mathematical_llm = create_monitored_llm("mathematical_analyst", temperature=0.05, model=model_name)
+            # Use monitored LLMs that capture agent conversations - one per agent
+            self.physics_expert_llm = create_monitored_llm("physics_expert", temperature=0.1, model=model_name)
+            self.hypothesis_generator_llm = create_monitored_llm("hypothesis_generator", temperature=0.7, model=model_name)
+            self.mathematical_analyst_llm = create_monitored_llm("mathematical_analyst", temperature=0.05, model=model_name)
+            self.experimental_designer_llm = create_monitored_llm("experimental_designer", temperature=0.3, model=model_name)
+            self.pattern_analyst_llm = create_monitored_llm("pattern_analyst", temperature=0.2, model=model_name)
+            self.quantum_specialist_llm = create_monitored_llm("quantum_specialist", temperature=0.1, model=model_name)
+            self.relativity_expert_llm = create_monitored_llm("relativity_expert", temperature=0.1, model=model_name)
+            self.condensed_matter_expert_llm = create_monitored_llm("condensed_matter_expert", temperature=0.1, model=model_name)
+            self.computational_physicist_llm = create_monitored_llm("computational_physicist", temperature=0.1, model=model_name)
+            self.physics_communicator_llm = create_monitored_llm("physics_communicator", temperature=0.4, model=model_name)
         else:
             # Use standard LLMs
-            self.precise_llm = ChatOpenAI(
-                model=model_name,
-                temperature=0.1  # Low temperature for accuracy
-            )
-            
-            self.creative_llm = ChatOpenAI(
-                model=model_name,
-                temperature=0.7  # High temperature for creativity
-            )
-            
-            self.mathematical_llm = ChatOpenAI(
-                model=model_name,
-                temperature=0.05  # Very low for mathematical precision
-            )
+            self.physics_expert_llm = ChatOpenAI(model=model_name, temperature=0.1)
+            self.hypothesis_generator_llm = ChatOpenAI(model=model_name, temperature=0.7)
+            self.mathematical_analyst_llm = ChatOpenAI(model=model_name, temperature=0.05)
+            self.experimental_designer_llm = ChatOpenAI(model=model_name, temperature=0.3)
+            self.pattern_analyst_llm = ChatOpenAI(model=model_name, temperature=0.2)
+            self.quantum_specialist_llm = ChatOpenAI(model=model_name, temperature=0.1)
+            self.relativity_expert_llm = ChatOpenAI(model=model_name, temperature=0.1)
+            self.condensed_matter_expert_llm = ChatOpenAI(model=model_name, temperature=0.1)
+            self.computational_physicist_llm = ChatOpenAI(model=model_name, temperature=0.1)
+            self.physics_communicator_llm = ChatOpenAI(model=model_name, temperature=0.4)
         
         # Create specialized physics agents
         self.agents = self._create_agents()
@@ -79,7 +82,7 @@ class PhysicsGPTCrew:
             experiments, and acknowledge limitations. Your responses are authoritative yet accessible.""",
             verbose=True,
             allow_delegation=False,
-            llm=self.precise_llm
+            llm=self.physics_expert_llm
         )
         
         # 2. Creative Physics Researcher - Novel hypotheses and connections
@@ -93,7 +96,7 @@ class PhysicsGPTCrew:
             in established physics principles.""",
             verbose=True,
             allow_delegation=False,
-            llm=self.creative_llm
+            llm=self.hypothesis_generator_llm
         )
         
         # 3. Mathematical Physics Specialist - Quantitative analysis
@@ -106,7 +109,7 @@ class PhysicsGPTCrew:
             linear algebra, complex analysis, and computational physics.""",
             verbose=True,
             allow_delegation=False,
-            llm=self.mathematical_llm
+            llm=self.mathematical_analyst_llm
         )
         
         # 4. Experimental Physics Designer - Practical testing approaches
@@ -119,7 +122,7 @@ class PhysicsGPTCrew:
             ensuring that proposed experiments are both scientifically valuable and practically feasible.""",
             verbose=True,
             allow_delegation=False,
-            llm=self.precise_llm
+            llm=self.experimental_designer_llm
         )
         
         # 5. Pattern Recognition Specialist - Data analysis and relationships
@@ -132,7 +135,7 @@ class PhysicsGPTCrew:
             You help connect theoretical predictions with observational evidence.""",
             verbose=True,
             allow_delegation=False,
-            llm=self.precise_llm
+            llm=self.pattern_analyst_llm
         )
         
         # 6. Quantum Mechanics Specialist - Deep quantum expertise
@@ -146,7 +149,7 @@ class PhysicsGPTCrew:
             and connect them to practical applications.""",
             verbose=True,
             allow_delegation=False,
-            llm=self.precise_llm
+            llm=self.quantum_specialist_llm
         )
         
         # 7. Relativity & Cosmology Expert - Spacetime and universe-scale physics
@@ -160,7 +163,7 @@ class PhysicsGPTCrew:
             and astronomical surveys.""",
             verbose=True,
             allow_delegation=False,
-            llm=self.precise_llm
+            llm=self.relativity_expert_llm
         )
         
         # 8. Condensed Matter Physicist - Materials and many-body systems
@@ -173,7 +176,7 @@ class PhysicsGPTCrew:
             in materials. You can connect microscopic physics to macroscopic material properties.""",
             verbose=True,
             allow_delegation=False,
-            llm=self.precise_llm
+            llm=self.condensed_matter_expert_llm
         )
         
         # 9. Computational Physics Specialist - Numerical methods and simulations
@@ -187,7 +190,7 @@ class PhysicsGPTCrew:
             the computational techniques needed to model physical systems.""",
             verbose=True,
             allow_delegation=False,
-            llm=self.precise_llm
+            llm=self.computational_physicist_llm
         )
         
         # 10. Physics Education & Communication Specialist - Making physics accessible
@@ -201,7 +204,7 @@ class PhysicsGPTCrew:
             insights are communicated effectively.""",
             verbose=True,
             allow_delegation=False,
-            llm=self.creative_llm
+            llm=self.physics_communicator_llm
         )
         
         return agents
