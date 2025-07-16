@@ -323,7 +323,7 @@ def main():
         print("📋 LABORATORY RESEARCH REPORT:")
         print("="*70)
         print(result)
-    else:
+        else:
         print("\n💡 Usage: python physics_crew_system.py 'your physics question'")
         print("💡 Example: python physics_crew_system.py 'how does quantum entanglement work in many-body systems?'")
 
