@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-PhysicsGPT - Clean Multi-Agent System with CrewAI
-Professional physics research system with specialized AI agents.
+PhysicsGPT - 10-Agent Physics Laboratory System
+Mimics a real physics research lab with specialized roles and natural workflow.
 """
 
 import os
@@ -23,188 +23,269 @@ from langchain_openai import ChatOpenAI
 # Load environment variables
 load_dotenv()
 
-class PhysicsGPTCrew:
-    """A specialized CrewAI system for comprehensive physics analysis."""
+class PhysicsLabSystem:
+    """A 10-agent physics laboratory system mimicking real research lab dynamics."""
     
     def __init__(self):
-        """Initialize the PhysicsGPT crew with specialized agents and enhanced telemetry."""
+        """Initialize the physics lab with all 10 specialized agents."""
         
-        # Initialize LLMs with different temperatures for different purposes
+        # Initialize LLMs with different personalities for different roles
         model_name = os.getenv("PHYSICS_AGENT_MODEL", "gpt-4o-mini")
         
-        # Use standard ChatOpenAI - CrewAI will handle telemetry automatically
-        self.precise_llm = ChatOpenAI(temperature=0.1, model=model_name)
-        self.creative_llm = ChatOpenAI(temperature=0.3, model=model_name)
-        self.mathematical_llm = ChatOpenAI(temperature=0.05, model=model_name)
+        # Lab Director - Strategic and decisive
+        self.director_llm = ChatOpenAI(temperature=0.2, model=model_name)
+        # Senior Researchers - Precise and analytical  
+        self.senior_llm = ChatOpenAI(temperature=0.1, model=model_name)
+        # Specialists - Creative within their domain
+        self.specialist_llm = ChatOpenAI(temperature=0.3, model=model_name)
+        # Mathematical - Ultra precise
+        self.math_llm = ChatOpenAI(temperature=0.05, model=model_name)
+        # Communicator - Creative and accessible
+        self.comm_llm = ChatOpenAI(temperature=0.4, model=model_name)
         
-        # Initialize agents
-        self.agents = self._create_agents()
+        # Initialize all 10 agents
+        self.agents = self._create_physics_lab_team()
         
-    def _create_agents(self):
-        """Create specialized physics agents with proper delegation setup."""
+    def _create_physics_lab_team(self):
+        """Create the complete 10-agent physics laboratory team."""
         
-        # Senior Physics Expert - The coordinator
+        # LAB DIRECTOR - The orchestrator
+        lab_director = Agent(
+            role='Lab Director',
+            goal='Orchestrate comprehensive physics research by coordinating all lab specialists',
+            backstory="""You are the director of a world-class physics research laboratory. You coordinate 
+            complex research projects by assigning specific tasks to your team of 9 specialized researchers. 
+            You understand each team member's expertise and know how to delegate effectively to produce 
+            groundbreaking physics research. Your job is to ensure all relevant expertise is brought to bear 
+            on each research question.""",
+            verbose=True,
+            allow_delegation=True,
+            llm=self.director_llm
+        )
+        
+        # SENIOR PHYSICS EXPERT - The theoretical backbone
         physics_expert = Agent(
             role='Senior Physics Expert',
-            goal='Coordinate comprehensive physics analysis by delegating specialized tasks to team members',
-            backstory="""You are a world-renowned physicist and team leader with expertise across all branches 
-            of physics. You coordinate complex physics research by delegating specialized tasks to your expert 
-            team members. You know when to delegate theoretical work to theorists, experimental design to 
-            experimentalists, and mathematical analysis to analysts.""",
-            verbose=True,
-            allow_delegation=True,  # Enable delegation
-            llm=self.precise_llm
-        )
-        
-        # Theoretical Physicist
-        theoretical_physicist = Agent(
-            role='Theoretical Physicist',
-            goal='Develop theoretical frameworks and mathematical models when requested',
-            backstory="""You specialize in theoretical physics and mathematical modeling. You work on specific 
-            theoretical tasks assigned by the Senior Physics Expert. You derive equations from first principles, 
-            develop theoretical frameworks, and connect abstract concepts to observable phenomena.""",
-            verbose=True,
-            allow_delegation=False,  # Cannot delegate further
-            llm=self.mathematical_llm
-        )
-        
-        # Experimental Physics Consultant
-        experimental_consultant = Agent(
-            role='Experimental Physics Consultant',
-            goal='Design experiments and analyze practical implementation when requested',
-            backstory="""You are an expert in experimental physics who works on specific experimental tasks 
-            assigned by the Senior Physics Expert. You design feasible experiments, identify practical 
-            constraints, specify needed equipment, and analyze implementation challenges.""",
+            goal='Provide rigorous theoretical analysis and validate physics principles',
+            backstory="""You are the senior theoretical physicist in the lab with deep expertise across 
+            all physics domains. You work on theoretical frameworks assigned by the Lab Director and 
+            ensure all physics is sound and rigorous. You're the go-to person for fundamental physics 
+            principles and theoretical validation.""",
             verbose=True,
             allow_delegation=False,
-            llm=self.creative_llm
+            llm=self.senior_llm
         )
         
-        # Mathematical Analyst
+        # HYPOTHESIS GENERATOR - The creative mind
+        hypothesis_generator = Agent(
+            role='Hypothesis Generator',
+            goal='Generate creative research hypotheses and explore novel approaches',
+            backstory="""You are the lab's creative researcher who generates innovative hypotheses and 
+            explores unconventional approaches. When the Lab Director needs fresh ideas or alternative 
+            perspectives, you provide creative thinking while maintaining scientific rigor.""",
+            verbose=True,
+            allow_delegation=False,
+            llm=self.specialist_llm
+        )
+        
+        # MATHEMATICAL ANALYST - The calculation specialist
         mathematical_analyst = Agent(
             role='Mathematical Analyst',
-            goal='Perform rigorous mathematical calculations when requested',
-            backstory="""You are a mathematical physicist who handles specific calculation tasks assigned 
-            by the Senior Physics Expert. You perform detailed derivations, dimensional analysis, quantitative 
-            estimates, and provide mathematical rigor to physics problems.""",
+            goal='Perform complex calculations and mathematical modeling',
+            backstory="""You are the lab's mathematical specialist who handles all complex calculations, 
+            derivations, and numerical analysis. When the Lab Director needs precise mathematical work, 
+            you provide detailed calculations, dimensional analysis, and quantitative modeling.""",
             verbose=True,
             allow_delegation=False,
-            llm=self.mathematical_llm
+            llm=self.math_llm
         )
         
-        # Science Communicator
-        science_communicator = Agent(
-            role='Science Communicator',
-            goal='Synthesize and communicate physics results when requested',
-            backstory="""You excel at making complex physics accessible. You work on communication tasks 
-            assigned by the Senior Physics Expert, taking technical analysis from other team members and 
-            presenting it clearly while maintaining scientific accuracy.""",
+        # EXPERIMENTAL DESIGNER - The practical expert
+        experimental_designer = Agent(
+            role='Experimental Designer',
+            goal='Design feasible experiments and practical implementations',
+            backstory="""You are the lab's experimental physics specialist who designs practical experiments 
+            and implementation strategies. When the Lab Director needs experimental validation or practical 
+            approaches, you provide detailed experimental design and feasibility analysis.""",
             verbose=True,
             allow_delegation=False,
-            llm=self.creative_llm
+            llm=self.specialist_llm
         )
         
-        return [physics_expert, theoretical_physicist, experimental_consultant, 
-                mathematical_analyst, science_communicator]
+        # QUANTUM SPECIALIST - The quantum expert
+        quantum_specialist = Agent(
+            role='Quantum Specialist',
+            goal='Analyze quantum mechanical aspects and quantum technologies',
+            backstory="""You are the lab's quantum mechanics expert specializing in quantum phenomena, 
+            quantum computing, and quantum technologies. When the Lab Director encounters quantum-related 
+            questions, you provide specialized quantum mechanical analysis and insights.""",
+            verbose=True,
+            allow_delegation=False,
+            llm=self.specialist_llm
+        )
+        
+        # RELATIVITY EXPERT - The spacetime specialist  
+        relativity_expert = Agent(
+            role='Relativity Expert',
+            goal='Analyze relativistic effects and cosmological phenomena',
+            backstory="""You are the lab's relativity and cosmology specialist with expertise in special 
+            relativity, general relativity, and cosmological phenomena. When the Lab Director needs analysis 
+            of spacetime physics or cosmological questions, you provide specialized relativistic insights.""",
+            verbose=True,
+            allow_delegation=False,
+            llm=self.specialist_llm
+        )
+        
+        # CONDENSED MATTER EXPERT - The materials specialist
+        condensed_matter_expert = Agent(
+            role='Condensed Matter Expert', 
+            goal='Analyze materials science and solid-state physics phenomena',
+            backstory="""You are the lab's condensed matter physicist specializing in materials science, 
+            solid-state physics, and many-body systems. When the Lab Director needs materials or solid-state 
+            analysis, you provide specialized insights into material properties and phase behavior.""",
+            verbose=True,
+            allow_delegation=False,
+            llm=self.specialist_llm
+        )
+        
+        # COMPUTATIONAL PHYSICIST - The simulation expert
+        computational_physicist = Agent(
+            role='Computational Physicist',
+            goal='Provide numerical methods and computational analysis',
+            backstory="""You are the lab's computational physics specialist who handles numerical methods, 
+            simulations, and computational modeling. When the Lab Director needs computational analysis 
+            or numerical solutions, you provide algorithmic approaches and simulation strategies.""",
+            verbose=True,
+            allow_delegation=False,
+            llm=self.specialist_llm
+        )
+        
+        # PHYSICS COMMUNICATOR - The translator
+        physics_communicator = Agent(
+            role='Physics Communicator',
+            goal='Synthesize research into clear, accessible explanations',
+            backstory="""You are the lab's science communication specialist who translates complex physics 
+            research into clear, accessible explanations. When the Lab Director needs final synthesis and 
+            communication, you integrate all specialist contributions into coherent, understandable analysis.""",
+            verbose=True,
+            allow_delegation=False,
+            llm=self.comm_llm
+        )
+        
+        return [lab_director, physics_expert, hypothesis_generator, mathematical_analyst,
+                experimental_designer, quantum_specialist, relativity_expert, 
+                condensed_matter_expert, computational_physicist, physics_communicator]
     
-    def analyze_physics_query(self, query: str) -> str:
+    def analyze_physics_question(self, question: str) -> str:
         """
-        Analyze a physics query using collaborative agent delegation.
+        Analyze a physics question using the full 10-agent laboratory team.
         
         Args:
-            query: The physics question or problem to analyze
+            question: The physics question to analyze
             
         Returns:
-            Comprehensive physics analysis
+            Comprehensive physics analysis from the laboratory team
         """
         
-        # Create a single collaborative task for the Senior Physics Expert
-        # This agent will delegate specific subtasks to other team members
-        collaborative_task = Task(
-            description=f"""As Senior Physics Expert, analyze this physics query by coordinating with your team: '{query}'
+        # Create lab research task for the director
+        research_task = Task(
+            description=f"""As Lab Director, coordinate a comprehensive physics research project to analyze: '{question}'
 
-You have access to specialized team members:
-- Theoretical Physicist: For theoretical frameworks and mathematical models
-- Experimental Physics Consultant: For experimental design and practical implementation
-- Mathematical Analyst: For detailed calculations and mathematical analysis  
-- Science Communicator: For clear synthesis and presentation
+Your laboratory team consists of:
+- Senior Physics Expert: Theoretical analysis and physics validation
+- Hypothesis Generator: Creative ideas and novel approaches  
+- Mathematical Analyst: Complex calculations and mathematical modeling
+- Experimental Designer: Practical experiments and implementation
+- Quantum Specialist: Quantum mechanical analysis
+- Relativity Expert: Relativistic and cosmological analysis
+- Condensed Matter Expert: Materials and solid-state analysis
+- Computational Physicist: Numerical methods and simulations
+- Physics Communicator: Final synthesis and clear presentation
 
-Your approach should be:
-1. Start with your own expert analysis of the core physics
-2. Delegate specific theoretical work to the Theoretical Physicist
-3. Delegate experimental aspects to the Experimental Physics Consultant  
-4. Delegate complex calculations to the Mathematical Analyst
-5. Delegate final synthesis to the Science Communicator
+Your research methodology:
+1. Assess the question and identify which specialists are needed
+2. Delegate specific research tasks to relevant team members using simple, clear task descriptions
+3. For delegation, use the format: task="specific work to do", context="all necessary background info", coworker="exact role name"
+4. Collect and integrate specialist contributions
+5. Delegate final synthesis to the Physics Communicator
+6. Ensure comprehensive coverage of all relevant physics aspects
 
-Coordinate the team to produce a comprehensive analysis covering:
-- Core physics principles and phenomena
-- Theoretical frameworks and mathematical models
-- Experimental approaches and practical considerations
-- Detailed calculations and quantitative analysis
-- Clear, accessible explanation of results
+Remember: When delegating, provide task and context as simple strings, not complex objects.
 
-Use the 'Delegate work to coworker' tool to assign specific tasks to team members.
-Provide clear, specific task descriptions and full context for each delegation.""",
-            agent=self.agents[0],  # Senior Physics Expert with delegation enabled
-            expected_output="Comprehensive collaborative physics analysis incorporating input from all team members"
+Coordinate your team to produce a thorough, multi-perspective physics analysis that leverages the full expertise of your laboratory.""",
+            agent=self.agents[0],  # Lab Director
+            expected_output="Comprehensive laboratory analysis integrating insights from all relevant specialists"
         )
         
-        # Create crew with the collaborative task
-        crew = Crew(
+        # Create crew with hierarchical lab structure
+        lab_crew = Crew(
             agents=self.agents,
-            tasks=[collaborative_task],  # Single collaborative task
-            process=Process.hierarchical,  # Use hierarchical process for delegation
-            manager_llm=self.precise_llm,  # LLM for the manager (Senior Physics Expert)
-            verbose=True,              # Enable detailed logging
-            share_crew=True,          # Enable enhanced telemetry
-            max_rpm=30,               # Rate limiting
-            memory=True               # Enable crew memory
+            tasks=[research_task],
+            process=Process.hierarchical,
+            manager_llm=self.director_llm,
+            verbose=True,
+            share_crew=True,
+            max_rpm=30,
+            memory=True
         )
         
-        # Execute the analysis
-        print(f"🚀 Starting collaborative physics analysis: {query}")
+        # Execute laboratory research
+        print(f"🔬 Starting physics laboratory research: {question}")
+        print("=" * 80)
+        print("🏛️  Physics Laboratory Team Activated")
+        print("👨‍🔬 Lab Director coordinating 9 specialist researchers")
+        print("⚛️  Full-spectrum physics analysis in progress...")
         print("=" * 80)
         
-        result = crew.kickoff()
+        result = lab_crew.kickoff()
         
         print("=" * 80)
-        print("✅ Collaborative analysis complete!")
+        print("✅ Laboratory research complete!")
+        print("📋 Analysis ready for review")
         
         return result
 
 
 def main():
-    """Main entry point for PhysicsGPT."""
+    """Main entry point for the Physics Laboratory System."""
     
-    print("⚛️  PhysicsGPT - Collaborative Physics Research System")
+    print("🏛️  PhysicsGPT - 10-Agent Physics Research Laboratory")
     print("=" * 70)
-    print("🤖 Powered by CrewAI with Hierarchical Agent Collaboration")
-    print("🧠 Senior Physics Expert (Coordinator)")
-    print("🔬 Theoretical Physicist • Experimental Consultant")
-    print("📊 Mathematical Analyst • Science Communicator")
+    print("🔬 Mimicking Real Physics Lab Dynamics")
+    print("👨‍🔬 Lab Director + 9 Specialized Researchers")
+    print("")
+    print("🧠 Senior Physics Expert (Theoretical Backbone)")
+    print("💡 Hypothesis Generator (Creative Mind)")  
+    print("📊 Mathematical Analyst (Calculation Specialist)")
+    print("⚗️  Experimental Designer (Practical Expert)")
+    print("⚛️  Quantum Specialist (Quantum Expert)")
+    print("🌌 Relativity Expert (Spacetime Specialist)")
+    print("🔧 Condensed Matter Expert (Materials Specialist)")
+    print("💻 Computational Physicist (Simulation Expert)")
+    print("📝 Physics Communicator (Science Translator)")
     print("=" * 70)
     
-    # Initialize the system
+    # Initialize the laboratory
     try:
-        physics_crew = PhysicsGPTCrew()
-        print("✅ PhysicsGPT collaborative system initialized successfully")
-        print(f"🤖 Available agents: {len(physics_crew.agents)}")
+        physics_lab = PhysicsLabSystem()
+        print("✅ Physics laboratory initialized successfully")
+        print(f"👥 Research team: {len(physics_lab.agents)} total members")
     except Exception as e:
-        print(f"❌ Failed to initialize PhysicsGPT: {e}")
+        print(f"❌ Failed to initialize physics laboratory: {e}")
         return
     
     # Check for command line query
     if len(sys.argv) > 1:
-        query = " ".join(sys.argv[1:])
-        result = physics_crew.analyze_physics_query(query)
+        question = " ".join(sys.argv[1:])
+        result = physics_lab.analyze_physics_question(question)
         
         print("\n" + "="*70)
-        print("📄 COLLABORATIVE ANALYSIS RESULT:")
+        print("📋 LABORATORY RESEARCH REPORT:")
         print("="*70)
         print(result)
     else:
         print("\n💡 Usage: python physics_crew_system.py 'your physics question'")
-        print("💡 Example: python physics_crew_system.py 'how to detect dark matter in a room?'")
+        print("💡 Example: python physics_crew_system.py 'how does quantum entanglement work in many-body systems?'")
 
 
 if __name__ == "__main__":

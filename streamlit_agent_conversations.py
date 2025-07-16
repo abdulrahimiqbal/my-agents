@@ -15,7 +15,7 @@ import time
 import io
 import contextlib
 from datetime import datetime
-from physics_crew_system import PhysicsGPTCrew
+from physics_crew_system import PhysicsLabSystem
 
 # Basic page configuration
 st.set_page_config(
@@ -83,23 +83,23 @@ def run_analysis(query):
     try:
         log_telemetry("Starting physics analysis")
         
-        # Initialize crew
-        log_telemetry("Initializing physics crew")
-        crew = PhysicsGPTCrew()
-        log_telemetry("Physics crew initialized")
+        # Initialize lab
+        log_telemetry("Initializing physics laboratory")
+        lab = PhysicsLabSystem()
+        log_telemetry("Physics laboratory initialized (10 agents)")
         
         # Run analysis with output capture
         log_telemetry(f"Analyzing query: {query}")
-        log_telemetry("Capturing CrewAI agent conversations...")
+        log_telemetry("Capturing 10-agent laboratory conversations...")
         
         with capture_crew_output() as output:
-            result = crew.analyze_physics_query(query)
+            result = lab.analyze_physics_question(query)
         
         # Store results
         st.session_state.analysis_results = result
         st.session_state.analysis_error = None
-        log_telemetry("Analysis completed successfully")
-        log_telemetry(f"Captured {len(st.session_state.crew_output)} crew output messages")
+        log_telemetry("Laboratory analysis completed successfully")
+        log_telemetry(f"Captured {len(st.session_state.crew_output)} lab output messages")
         
         return True
         
@@ -111,7 +111,7 @@ def run_analysis(query):
         return False
 
 # Main interface
-st.write("PHYSICS ANALYSIS SYSTEM")
+st.write("PHYSICS LABORATORY SYSTEM - 10 AGENTS")
 st.write("=" * 50)
 
 # Input section
@@ -174,16 +174,16 @@ if st.session_state.telemetry_logs:
 else:
     st.write("No telemetry data")
 
-# Crew Output section (the actual agent conversations)
+# Lab Output section (the actual agent conversations)
 st.write("")
-st.write("CREW AGENT CONVERSATIONS:")
+st.write("10-AGENT LABORATORY CONVERSATIONS:")
 st.write("-" * 30)
 
 if st.session_state.crew_output:
-    crew_text = "\n".join(st.session_state.crew_output)
-    st.text_area("Agent Output", value=crew_text, height=400)
+    lab_text = "\n".join(st.session_state.crew_output)
+    st.text_area("Laboratory Output", value=lab_text, height=400)
 else:
-    st.write("No crew output yet")
+    st.write("No laboratory output yet")
 
 # Query info
 if st.session_state.current_query:
