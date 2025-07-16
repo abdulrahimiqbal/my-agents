@@ -20,6 +20,10 @@ class MonitoredChatOpenAI(ChatOpenAI):
     def _generate(self, messages: List[BaseMessage], **kwargs) -> Any:
         """Override to capture agent thinking process."""
         
+        # Debug logging
+        print(f"📞 MonitoredChatOpenAI._generate called for {self.agent_name}")
+        print(f"📊 Monitoring active: {agent_monitor.monitoring}")
+        
         # Start monitoring if not already started
         if not self.conversation_started and agent_monitor.monitoring:
             # Extract task from the last human message
@@ -34,6 +38,7 @@ class MonitoredChatOpenAI(ChatOpenAI):
                     # Extract first 100 chars as task description
                     task_description = last_human_msg[:100] + "..." if len(last_human_msg) > 100 else last_human_msg
             
+            print(f"🚀 Starting conversation for {self.agent_name}: {task_description}")
             agent_monitor.start_agent_conversation(self.agent_name, task_description)
             self.conversation_started = True
             
@@ -43,7 +48,13 @@ class MonitoredChatOpenAI(ChatOpenAI):
             
         # Call the original method
         start_time = time.time()
-        result = super()._generate(messages, **kwargs)
+        try:
+            result = super()._generate(messages, **kwargs)
+            print(f"✅ LLM generation completed for {self.agent_name}")
+        except Exception as e:
+            print(f"❌ LLM generation failed for {self.agent_name}: {e}")
+            raise
+            
         duration = time.time() - start_time
         
         # Extract and parse the response
@@ -52,6 +63,7 @@ class MonitoredChatOpenAI(ChatOpenAI):
             
             # Parse the response for thoughts, decisions, etc.
             if agent_monitor.monitoring:
+                print(f"🔍 Parsing response for {self.agent_name}")
                 self._parse_and_monitor_response(response_text)
                 
                 # Update progress
@@ -59,9 +71,20 @@ class MonitoredChatOpenAI(ChatOpenAI):
                 time.sleep(0.5)  # Small delay for UI
                 
                 # Complete the conversation
+                print(f"✅ Completing conversation for {self.agent_name}")
                 agent_monitor.complete_agent_conversation(self.agent_name, response_text)
         
         return result
+    
+    def invoke(self, input, config=None, **kwargs):
+        """Override invoke method as well, in case CrewAI uses this."""
+        print(f"📞 MonitoredChatOpenAI.invoke called for {self.agent_name}")
+        return super().invoke(input, config, **kwargs)
+    
+    def stream(self, input, config=None, **kwargs):
+        """Override stream method as well."""
+        print(f"📞 MonitoredChatOpenAI.stream called for {self.agent_name}")
+        return super().stream(input, config, **kwargs)
     
     def _parse_and_monitor_response(self, response_text: str):
         """Parse agent response and extract thoughts, decisions, questions."""

@@ -245,6 +245,14 @@ def main():
         with col_b:
             st.metric("Completed Agents", summary.get('completed_agents', 0))
             st.metric("Total Agents", summary.get('total_agents', 0))
+        
+        # Add diagnostic button
+        if st.button("🔧 Run Diagnostics"):
+            run_diagnostics()
+        
+        # Add test monitoring button
+        if st.button("🧪 Test Monitoring"):
+            test_monitoring_system()
     
     with col2:
         st.header("🤖 Agent Conversations")
@@ -256,11 +264,34 @@ def main():
             time.sleep(2)
             st.rerun()
         
+        # Check for analysis errors and display them
+        if hasattr(st.session_state, 'analysis_error') and st.session_state.analysis_error:
+            st.error(f"❌ Analysis Error: {st.session_state.analysis_error}")
+            if st.button("🔄 Clear Error"):
+                del st.session_state.analysis_error
+                st.rerun()
+        
+        # Check for analysis results and display them
+        if hasattr(st.session_state, 'analysis_result') and st.session_state.analysis_result:
+            result = st.session_state.analysis_result
+            if result.get('success'):
+                st.success("✅ Analysis completed successfully!")
+                with st.expander("📄 View Analysis Result", expanded=True):
+                    st.markdown(result.get('result', 'No result available'))
+            else:
+                st.error(f"❌ Analysis failed: {result.get('error', 'Unknown error')}")
+        
         # Display conversations
         conversations = st.session_state.conversations
         
         if not conversations:
-            st.info("👋 Start an analysis to see agent conversations in real-time!")
+            if st.session_state.analysis_running:
+                st.info("🔄 Analysis is running... Waiting for agent conversations to appear...")
+                # Add some debugging info
+                st.caption(f"Monitoring active: {agent_monitor.monitoring}")
+                st.caption(f"Last update: {st.session_state.last_update}")
+            else:
+                st.info("👋 Start an analysis to see agent conversations in real-time!")
         else:
             # Sort conversations by start time
             sorted_conversations = sorted(
@@ -352,6 +383,13 @@ def display_agent_conversation(conv_data):
 def start_analysis(query, selected_agents, demo_mode):
     """Start the agent analysis."""
     st.session_state.analysis_running = True
+    
+    # Clear previous errors and results
+    if hasattr(st.session_state, 'analysis_error'):
+        del st.session_state.analysis_error
+    if hasattr(st.session_state, 'analysis_result'):
+        del st.session_state.analysis_result
+    
     agent_monitor.start_monitoring()
     
     if demo_mode:
@@ -368,17 +406,28 @@ def start_analysis(query, selected_agents, demo_mode):
         # Start real analysis with monitored CrewAI
         def run_real_analysis():
             try:
+                print(f"🚀 Starting real analysis with monitoring enabled")
+                print(f"📋 Query: {query}")
+                print(f"🤖 Selected agents: {selected_agents}")
+                
                 # Create physics crew with monitoring enabled
                 monitored_crew = PhysicsGPTCrew(enable_monitoring=True)
+                print(f"✅ Physics crew created successfully")
                 
                 # Run the analysis
+                print(f"🔄 Running analysis...")
                 result = monitored_crew.analyze_physics_query(query, selected_agents)
+                print(f"📊 Analysis result: {result}")
                 
                 # Store result in session state
                 st.session_state.analysis_result = result
                 st.session_state.analysis_running = False
+                print(f"✅ Analysis completed and stored in session state")
                 
             except Exception as e:
+                print(f"❌ Analysis failed with error: {str(e)}")
+                import traceback
+                traceback.print_exc()
                 st.session_state.analysis_error = str(e)
                 st.session_state.analysis_running = False
         
@@ -386,6 +435,7 @@ def start_analysis(query, selected_agents, demo_mode):
         analysis_thread = threading.Thread(target=run_real_analysis)
         analysis_thread.daemon = True
         analysis_thread.start()
+        print(f"🔄 Analysis thread started")
         
     st.rerun()
 
@@ -394,6 +444,121 @@ def stop_analysis():
     st.session_state.analysis_running = False
     agent_monitor.stop_monitoring()
     st.rerun()
+
+def run_diagnostics():
+    """Run diagnostic functions to check monitoring system."""
+    st.info("🔧 Running Diagnostics...")
+    
+    # Check if monitoring is active
+    if agent_monitor.monitoring:
+        st.success("✅ Monitoring is active")
+        st.caption(f"Conversations: {len(agent_monitor.conversations)}")
+        st.caption(f"Active agents: {len(agent_monitor.active_agents)}")
+    else:
+        st.warning("⚠️ Monitoring is not active")
+    
+    # Check if callbacks are registered
+    if agent_monitor.update_callbacks:
+        st.success(f"✅ {len(agent_monitor.update_callbacks)} update callbacks registered")
+    else:
+        st.warning("⚠️ No update callbacks registered - conversations won't update")
+    
+    # Check if CrewAI is initialized
+    if st.session_state.physics_crew:
+        st.success("✅ Physics crew is initialized")
+    else:
+        st.error("❌ Physics crew is not initialized")
+    
+    # Test monitored LLM creation
+    try:
+        from monitored_llm import create_monitored_llm
+        test_llm = create_monitored_llm("test_agent", temperature=0.1)
+        st.success("✅ Monitored LLM creation works")
+    except Exception as e:
+        st.error(f"❌ Monitored LLM creation failed: {e}")
+    
+    # Check session state
+    st.subheader("Session State Debug")
+    st.json({
+        "analysis_running": st.session_state.analysis_running,
+        "system_ready": st.session_state.system_ready,
+        "monitoring_active": st.session_state.monitoring_active,
+        "last_update": st.session_state.last_update,
+        "conversations_count": len(st.session_state.conversations),
+        "has_analysis_error": hasattr(st.session_state, 'analysis_error'),
+        "has_analysis_result": hasattr(st.session_state, 'analysis_result')
+    })
+    
+    st.info("🔧 Diagnostics complete")
+
+def test_monitoring_system():
+    """Manually trigger a test of the monitoring system."""
+    st.info("🧪 Testing Monitoring System...")
+    try:
+        # Simulate a simple interaction
+        print("Simulating a simple interaction...")
+        test_agent = "test_agent"
+        test_task = "Testing the monitoring system."
+        test_reasoning = "This is a test to ensure the monitoring system is working correctly."
+        
+        # Create a dummy conversation data
+        dummy_conversation = {
+            "agent_name": test_agent,
+            "status": "thinking",
+            "progress_percentage": 0,
+            "current_step": "Initializing",
+            "total_interactions": 0,
+            "start_time": time.time(),
+            "thoughts": [],
+            "decisions": [],
+            "questions": [],
+            "final_output": "Test completed successfully."
+        }
+        
+        # Add to session state for display
+        st.session_state.conversations[f"{test_agent}_{time.time()}"] = dummy_conversation
+        st.session_state.last_update = time.time()
+        
+        # Simulate a thought
+        print("Simulating a thought...")
+        dummy_conversation["thoughts"].append({
+            "timestamp": time.time(),
+            "content": f"Thought: {test_task} (Reasoning: {test_reasoning})"
+        })
+        st.session_state.last_update = time.time()
+        
+        # Simulate a decision
+        print("Simulating a decision...")
+        dummy_conversation["decisions"].append({
+            "timestamp": time.time(),
+            "decision": "Decision: Test decision.",
+            "reasoning": "Reasoning: This is a test reasoning."
+        })
+        st.session_state.last_update = time.time()
+        
+        # Simulate a question
+        print("Simulating a question...")
+        dummy_conversation["questions"].append({
+            "timestamp": time.time(),
+            "question": "Question: Test question."
+        })
+        st.session_state.last_update = time.time()
+        
+        # Simulate completion
+        print("Simulating completion...")
+        dummy_conversation["status"] = "completed"
+        dummy_conversation["progress_percentage"] = 100
+        dummy_conversation["current_step"] = "Final Output"
+        dummy_conversation["final_output"] = "Test completed successfully."
+        st.session_state.last_update = time.time()
+        
+        st.success("✅ Monitoring system test completed successfully!")
+        st.rerun()
+    except Exception as e:
+        st.error(f"❌ Monitoring system test failed: {e}")
+        import traceback
+        traceback.print_exc()
+        st.rerun()
 
 if __name__ == "__main__":
     main()
