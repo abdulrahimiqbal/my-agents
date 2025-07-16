@@ -13,9 +13,27 @@ class MonitoredChatOpenAI(ChatOpenAI):
     """ChatOpenAI wrapper that monitors and captures agent conversations."""
     
     def __init__(self, agent_name: str = "unknown", **kwargs):
+        # Remove agent_name from kwargs before passing to parent
+        self._agent_name = agent_name
+        self._conversation_started = False
+        
+        # Initialize parent class without the agent_name
         super().__init__(**kwargs)
-        self.agent_name = agent_name
-        self.conversation_started = False
+    
+    @property
+    def agent_name(self):
+        """Get the agent name."""
+        return self._agent_name
+    
+    @property
+    def conversation_started(self):
+        """Get conversation started status."""
+        return self._conversation_started
+    
+    @conversation_started.setter
+    def conversation_started(self, value):
+        """Set conversation started status."""
+        self._conversation_started = value
         
     def _generate(self, messages: List[BaseMessage], **kwargs) -> Any:
         """Override to capture agent thinking process."""
@@ -140,8 +158,21 @@ class MonitoredChatOpenAI(ChatOpenAI):
 
 def create_monitored_llm(agent_name: str, temperature: float = 0.1, model: str = "gpt-4o-mini") -> MonitoredChatOpenAI:
     """Create a monitored LLM for an agent."""
-    return MonitoredChatOpenAI(
-        agent_name=agent_name,
-        model=model,
-        temperature=temperature
-    )
+    try:
+        print(f"🔧 Creating monitored LLM for {agent_name}")
+        llm = MonitoredChatOpenAI(
+            agent_name=agent_name,
+            model=model,
+            temperature=temperature
+        )
+        print(f"✅ Successfully created monitored LLM for {agent_name}")
+        return llm
+    except Exception as e:
+        print(f"❌ Failed to create monitored LLM for {agent_name}: {e}")
+        print(f"🔄 Falling back to standard ChatOpenAI for {agent_name}")
+        # Fallback to standard ChatOpenAI if monitoring fails
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(
+            model=model,
+            temperature=temperature
+        )

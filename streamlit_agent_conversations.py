@@ -152,6 +152,11 @@ def main():
     else:
         # Show a small status indicator when system is ready
         st.success("✅ PhysicsGPT System Ready")
+        
+        # Ensure callback is registered even if system was already ready
+        if update_conversations_callback not in agent_monitor.update_callbacks:
+            agent_monitor.add_update_callback(update_conversations_callback)
+            print("🔄 Re-registered update callback")
     
     # Sidebar - Controls
     with st.sidebar:
@@ -511,64 +516,34 @@ def test_monitoring_system():
     """Manually trigger a test of the monitoring system."""
     st.info("🧪 Testing Monitoring System...")
     try:
+        # Force start monitoring
+        agent_monitor.start_monitoring()
+        print("🚀 Forced monitoring start")
+        
+        # Ensure callback is registered
+        if update_conversations_callback not in agent_monitor.update_callbacks:
+            agent_monitor.add_update_callback(update_conversations_callback)
+            print("🔄 Added callback during test")
+        
         # Simulate a simple interaction
         print("Simulating a simple interaction...")
         test_agent = "test_agent"
         test_task = "Testing the monitoring system."
-        test_reasoning = "This is a test to ensure the monitoring system is working correctly."
         
-        # Create a dummy conversation data
-        dummy_conversation = {
-            "agent_name": test_agent,
-            "status": "thinking",
-            "progress_percentage": 0,
-            "current_step": "Initializing",
-            "total_interactions": 0,
-            "start_time": time.time(),
-            "thoughts": [],
-            "decisions": [],
-            "questions": [],
-            "final_output": "Test completed successfully."
-        }
+        # Use agent_monitor directly to simulate conversation
+        agent_monitor.start_agent_conversation(test_agent, test_task)
         
-        # Add to session state for display
-        st.session_state.conversations[f"{test_agent}_{time.time()}"] = dummy_conversation
-        st.session_state.last_update = time.time()
-        
-        # Simulate a thought
-        print("Simulating a thought...")
-        dummy_conversation["thoughts"].append({
-            "timestamp": time.time(),
-            "content": f"Thought: {test_task} (Reasoning: {test_reasoning})"
-        })
-        st.session_state.last_update = time.time()
-        
-        # Simulate a decision
-        print("Simulating a decision...")
-        dummy_conversation["decisions"].append({
-            "timestamp": time.time(),
-            "decision": "Decision: Test decision.",
-            "reasoning": "Reasoning: This is a test reasoning."
-        })
-        st.session_state.last_update = time.time()
-        
-        # Simulate a question
-        print("Simulating a question...")
-        dummy_conversation["questions"].append({
-            "timestamp": time.time(),
-            "question": "Question: Test question."
-        })
-        st.session_state.last_update = time.time()
-        
-        # Simulate completion
-        print("Simulating completion...")
-        dummy_conversation["status"] = "completed"
-        dummy_conversation["progress_percentage"] = 100
-        dummy_conversation["current_step"] = "Final Output"
-        dummy_conversation["final_output"] = "Test completed successfully."
-        st.session_state.last_update = time.time()
+        # Simulate progress updates
+        agent_monitor.update_agent_progress(test_agent, 25, "Processing test data...")
+        agent_monitor.add_agent_thought(test_agent, "This is a test thought to verify the monitoring system works.")
+        agent_monitor.add_agent_decision(test_agent, "Proceed with test validation", "System appears to be functioning correctly")
+        agent_monitor.update_agent_progress(test_agent, 75, "Finalizing test...")
+        agent_monitor.add_agent_thought(test_agent, "Test is nearly complete. All systems nominal.")
+        agent_monitor.update_agent_progress(test_agent, 100, "Test complete")
+        agent_monitor.complete_agent_conversation(test_agent, "✅ Monitoring system test completed successfully! The conversation tracking is working properly.")
         
         st.success("✅ Monitoring system test completed successfully!")
+        st.info("🔄 Check the Agent Conversations panel to see the test conversation.")
         st.rerun()
     except Exception as e:
         st.error(f"❌ Monitoring system test failed: {e}")
