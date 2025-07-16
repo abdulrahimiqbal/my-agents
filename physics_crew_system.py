@@ -56,8 +56,23 @@ class PhysicsLabSystem:
             backstory="""You are the director of a world-class physics research laboratory. You coordinate 
             complex research projects by assigning specific tasks to your team of 9 specialized researchers. 
             You understand each team member's expertise and know how to delegate effectively to produce 
-            groundbreaking physics research. Your job is to ensure all relevant expertise is brought to bear 
-            on each research question.""",
+            groundbreaking physics research. 
+            
+            CRITICAL: You MUST delegate tasks to your specialists. You do NOT work alone. For every research 
+            question, you MUST identify which specialists are needed and delegate specific subtasks to them. 
+            Use the delegation tool to assign work to your team members. Only provide a final synthesis after 
+            collecting inputs from relevant specialists.
+            
+            Available specialists:
+            - Senior Physics Expert: Theoretical analysis
+            - Hypothesis Generator: Creative approaches  
+            - Mathematical Analyst: Calculations and modeling
+            - Experimental Designer: Practical experiments
+            - Quantum Specialist: Quantum mechanics
+            - Relativity Expert: Relativistic analysis
+            - Condensed Matter Expert: Materials analysis
+            - Computational Physicist: Simulations
+            - Physics Communicator: Final presentation""",
             verbose=True,
             allow_delegation=True,
             llm=self.director_llm
@@ -187,42 +202,67 @@ class PhysicsLabSystem:
             Comprehensive physics analysis from the laboratory team
         """
         
-        # Create lab research task for the director
-        research_task = Task(
-            description=f"""As Lab Director, coordinate a comprehensive physics research project to analyze: '{question}'
+        # Create multiple tasks for proper delegation flow
+        
+        # Initial coordination task
+        coordination_task = Task(
+            description=f"""As Lab Director, coordinate the research for: '{question}'
 
-Your laboratory team consists of:
-- Senior Physics Expert: Theoretical analysis and physics validation
-- Hypothesis Generator: Creative ideas and novel approaches  
-- Mathematical Analyst: Complex calculations and mathematical modeling
-- Experimental Designer: Practical experiments and implementation
-- Quantum Specialist: Quantum mechanical analysis
-- Relativity Expert: Relativistic and cosmological analysis
-- Condensed Matter Expert: Materials and solid-state analysis
-- Computational Physicist: Numerical methods and simulations
-- Physics Communicator: Final synthesis and clear presentation
+Step 1: Analyze the question and determine which specialists are needed
+Step 2: Delegate tasks to the appropriate specialists using the delegation tool
+Step 3: Collect results and coordinate final synthesis
 
-Your research methodology:
-1. Assess the question and identify which specialists are needed
-2. Delegate specific research tasks to relevant team members using simple, clear task descriptions
-3. For delegation, use the format: task="specific work to do", context="all necessary background info", coworker="exact role name"
-4. Collect and integrate specialist contributions
-5. Delegate final synthesis to the Physics Communicator
-6. Ensure comprehensive coverage of all relevant physics aspects
-
-Remember: When delegating, provide task and context as simple strings, not complex objects.
-
-Coordinate your team to produce a thorough, multi-perspective physics analysis that leverages the full expertise of your laboratory.""",
+CRITICAL: You MUST use delegation to assign work to specialists. Do not work alone.""",
             agent=self.agents[0],  # Lab Director
-            expected_output="Comprehensive laboratory analysis integrating insights from all relevant specialists"
+            expected_output="Coordination plan and delegation assignments"
         )
         
-        # Create crew with hierarchical lab structure
+        # Theoretical analysis task
+        theory_task = Task(
+            description=f"""Provide comprehensive theoretical analysis for: '{question}'
+Focus on fundamental physics principles, theoretical frameworks, and scientific foundations.""",
+            agent=self.agents[1],  # Senior Physics Expert
+            expected_output="Detailed theoretical physics analysis"
+        )
+        
+        # Creative hypothesis task
+        hypothesis_task = Task(
+            description=f"""Generate creative research hypotheses and novel approaches for: '{question}'
+Explore unconventional ideas while maintaining scientific rigor.""",
+            agent=self.agents[2],  # Hypothesis Generator
+            expected_output="Creative hypotheses and innovative approaches"
+        )
+        
+        # Mathematical analysis task
+        math_task = Task(
+            description=f"""Perform detailed mathematical analysis for: '{question}'
+Include calculations, dimensional analysis, and quantitative modeling.""",
+            agent=self.agents[3],  # Mathematical Analyst
+            expected_output="Mathematical models and calculations"
+        )
+        
+        # Experimental design task
+        experiment_task = Task(
+            description=f"""Design practical experiments and implementation strategies for: '{question}'
+Focus on feasible approaches with minimal resources.""",
+            agent=self.agents[4],  # Experimental Designer
+            expected_output="Experimental design and practical methods"
+        )
+        
+        # Final synthesis task
+        synthesis_task = Task(
+            description=f"""Create final comprehensive synthesis integrating all specialist contributions for: '{question}'
+Present findings in clear, accessible language combining all research perspectives.""",
+            agent=self.agents[9],  # Physics Communicator
+            expected_output="Comprehensive integrated physics analysis",
+            context=[theory_task, hypothesis_task, math_task, experiment_task]
+        )
+        
+        # Create crew with sequential task flow
         lab_crew = Crew(
             agents=self.agents,
-            tasks=[research_task],
-            process=Process.hierarchical,
-            manager_llm=self.director_llm,
+            tasks=[coordination_task, theory_task, hypothesis_task, math_task, experiment_task, synthesis_task],
+            process=Process.sequential,
             verbose=True,
             share_crew=True,
             max_rpm=30,
