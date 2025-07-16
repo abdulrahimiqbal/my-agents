@@ -147,11 +147,27 @@ def main():
                 st.success("✅ System initialized successfully!")
             except Exception as e:
                 st.error(f"❌ Failed to initialize system: {e}")
+                st.error("Please check your OpenAI API key and internet connection.")
                 return
+    else:
+        # Show a small status indicator when system is ready
+        st.success("✅ PhysicsGPT System Ready")
     
     # Sidebar - Controls
     with st.sidebar:
         st.header("🎛️ Control Panel")
+        
+        # Add prominent diagnostic section at the top
+        st.subheader("🔧 Debug Tools")
+        col_diag1, col_diag2 = st.columns(2)
+        with col_diag1:
+            if st.button("🔧 Diagnostics", type="secondary"):
+                run_diagnostics()
+        with col_diag2:
+            if st.button("🧪 Test Monitor", type="secondary"):
+                test_monitoring_system()
+        
+        st.divider()
         
         # Agent selection
         st.subheader("🤖 Select Agents")
