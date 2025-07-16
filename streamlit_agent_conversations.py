@@ -11,7 +11,6 @@ import sys
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 import streamlit as st
-import threading
 import time
 from datetime import datetime
 from physics_crew_system import PhysicsGPTCrew
@@ -31,6 +30,8 @@ if 'is_analyzing' not in st.session_state:
     st.session_state.is_analyzing = False
 if 'analysis_error' not in st.session_state:
     st.session_state.analysis_error = None
+if 'current_query' not in st.session_state:
+    st.session_state.current_query = ""
 
 def log_telemetry(message):
     """Add telemetry message to logs"""
@@ -41,11 +42,12 @@ def log_telemetry(message):
         st.session_state.telemetry_logs = st.session_state.telemetry_logs[-50:]
 
 def run_analysis(query):
-    """Run physics analysis in background thread"""
+    """Run physics analysis synchronously"""
     try:
         log_telemetry("Starting physics analysis")
         
         # Initialize crew
+        log_telemetry("Initializing physics crew")
         crew = PhysicsGPTCrew()
         log_telemetry("Physics crew initialized")
         
@@ -58,14 +60,14 @@ def run_analysis(query):
         st.session_state.analysis_error = None
         log_telemetry("Analysis completed successfully")
         
+        return True
+        
     except Exception as e:
         error_msg = f"Analysis failed: {str(e)}"
         st.session_state.analysis_error = error_msg
         st.session_state.analysis_results = None
         log_telemetry(error_msg)
-    
-    finally:
-        st.session_state.is_analyzing = False
+        return False
 
 # Main interface
 st.write("PHYSICS ANALYSIS SYSTEM")
@@ -77,26 +79,30 @@ query = st.text_input("Query", placeholder="e.g., how to detect dark matter in a
 
 if st.button("Analyze"):
     if query.strip():
-        st.session_state.is_analyzing = True
+        # Clear previous results
         st.session_state.analysis_results = None
         st.session_state.analysis_error = None
         st.session_state.telemetry_logs = []
+        st.session_state.current_query = query.strip()
         
-        # Start analysis in background thread
-        thread = threading.Thread(target=run_analysis, args=(query,))
-        thread.daemon = True
-        thread.start()
+        log_telemetry("Analysis request received")
         
-        log_telemetry("Analysis started")
+        # Show analysis in progress
+        with st.spinner("Analyzing physics question..."):
+            success = run_analysis(query.strip())
+        
+        if success:
+            st.success("Analysis completed!")
+        else:
+            st.error("Analysis failed!")
+            
     else:
-        st.write("Please enter a physics question")
+        st.warning("Please enter a physics question")
 
 # Status section
 st.write("")
 st.write("STATUS:")
-if st.session_state.is_analyzing:
-    st.write("ANALYZING...")
-elif st.session_state.analysis_results:
+if st.session_state.analysis_results:
     st.write("ANALYSIS COMPLETE")
 elif st.session_state.analysis_error:
     st.write("ANALYSIS FAILED")
@@ -112,8 +118,6 @@ if st.session_state.analysis_results:
     st.text_area("Results", value=st.session_state.analysis_results, height=300)
 elif st.session_state.analysis_error:
     st.text_area("Error", value=st.session_state.analysis_error, height=100)
-elif st.session_state.is_analyzing:
-    st.write("Analysis in progress...")
 else:
     st.write("No results yet")
 
@@ -128,7 +132,7 @@ if st.session_state.telemetry_logs:
 else:
     st.write("No telemetry data")
 
-# Auto-refresh during analysis
-if st.session_state.is_analyzing:
-    time.sleep(1)
-    st.rerun()
+# Query info
+if st.session_state.current_query:
+    st.write("")
+    st.write(f"Current query: {st.session_state.current_query}")
