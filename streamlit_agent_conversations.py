@@ -53,7 +53,7 @@ def run_analysis(query):
         
         # Run analysis
         log_telemetry(f"Analyzing query: {query}")
-        result = crew.analyze_physics_question(query)
+        result = crew.analyze_physics_query(query)
         
         # Store results
         st.session_state.analysis_results = result
