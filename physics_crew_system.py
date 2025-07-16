@@ -19,463 +19,207 @@ except ImportError:
 from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, Process
 from langchain_openai import ChatOpenAI
-from agent_monitor import agent_monitor, parse_agent_output
-from monitored_llm import create_monitored_llm
 
 # Load environment variables
 load_dotenv()
 
 class PhysicsGPTCrew:
-    """Clean, professional multi-agent physics research system using CrewAI."""
+    """A specialized CrewAI system for comprehensive physics analysis."""
     
-    def __init__(self, enable_monitoring=False):
-        """Initialize the PhysicsGPT crew with specialized agents.
-        
-        Args:
-            enable_monitoring: If True, use monitored LLMs to capture conversations
-        """
-        self.enable_monitoring = enable_monitoring
+    def __init__(self):
+        """Initialize the PhysicsGPT crew with specialized agents and enhanced telemetry."""
         
         # Initialize LLMs with different temperatures for different purposes
         model_name = os.getenv("PHYSICS_AGENT_MODEL", "gpt-4o-mini")
         
-        if enable_monitoring:
-            # Use monitored LLMs that capture agent conversations - one per agent
-            self.physics_expert_llm = create_monitored_llm("physics_expert", temperature=0.1, model=model_name)
-            self.hypothesis_generator_llm = create_monitored_llm("hypothesis_generator", temperature=0.7, model=model_name)
-            self.mathematical_analyst_llm = create_monitored_llm("mathematical_analyst", temperature=0.05, model=model_name)
-            self.experimental_designer_llm = create_monitored_llm("experimental_designer", temperature=0.3, model=model_name)
-            self.pattern_analyst_llm = create_monitored_llm("pattern_analyst", temperature=0.2, model=model_name)
-            self.quantum_specialist_llm = create_monitored_llm("quantum_specialist", temperature=0.1, model=model_name)
-            self.relativity_expert_llm = create_monitored_llm("relativity_expert", temperature=0.1, model=model_name)
-            self.condensed_matter_expert_llm = create_monitored_llm("condensed_matter_expert", temperature=0.1, model=model_name)
-            self.computational_physicist_llm = create_monitored_llm("computational_physicist", temperature=0.1, model=model_name)
-            self.physics_communicator_llm = create_monitored_llm("physics_communicator", temperature=0.4, model=model_name)
-        else:
-            # Use standard LLMs
-            self.physics_expert_llm = ChatOpenAI(model=model_name, temperature=0.1)
-            self.hypothesis_generator_llm = ChatOpenAI(model=model_name, temperature=0.7)
-            self.mathematical_analyst_llm = ChatOpenAI(model=model_name, temperature=0.05)
-            self.experimental_designer_llm = ChatOpenAI(model=model_name, temperature=0.3)
-            self.pattern_analyst_llm = ChatOpenAI(model=model_name, temperature=0.2)
-            self.quantum_specialist_llm = ChatOpenAI(model=model_name, temperature=0.1)
-            self.relativity_expert_llm = ChatOpenAI(model=model_name, temperature=0.1)
-            self.condensed_matter_expert_llm = ChatOpenAI(model=model_name, temperature=0.1)
-            self.computational_physicist_llm = ChatOpenAI(model=model_name, temperature=0.1)
-            self.physics_communicator_llm = ChatOpenAI(model=model_name, temperature=0.4)
+        # Use standard ChatOpenAI - CrewAI will handle telemetry automatically
+        self.precise_llm = ChatOpenAI(temperature=0.1, model=model_name)
+        self.creative_llm = ChatOpenAI(temperature=0.3, model=model_name)
+        self.mathematical_llm = ChatOpenAI(temperature=0.05, model=model_name)
         
-        # Create specialized physics agents
+        # Initialize agents
         self.agents = self._create_agents()
-    
-    def _create_agents(self) -> Dict[str, Agent]:
-        """Create the complete set of 8+ specialized physics research agents."""
         
-        agents = {}
+    def _create_agents(self):
+        """Create specialized physics agents with distinct roles."""
         
-        # 1. Senior Physics Expert - Theoretical rigor and established physics
-        agents['physics_expert'] = Agent(
+        # Senior Physics Expert
+        physics_expert = Agent(
             role='Senior Physics Expert',
-            goal='Provide rigorous, accurate physics analysis with mathematical precision',
-            backstory="""You are a world-renowned theoretical physicist with 20+ years of experience 
-            across quantum mechanics, relativity, thermodynamics, electromagnetism, and experimental physics. 
-            You provide scientifically accurate analysis with proper mathematical formulations, cite relevant 
-            experiments, and acknowledge limitations. Your responses are authoritative yet accessible.""",
+            goal='Provide comprehensive physics analysis with deep theoretical understanding',
+            backstory="""You are a world-renowned physicist with expertise across all branches of physics. 
+            You have published hundreds of papers and can explain complex phenomena clearly. Your analysis 
+            combines theoretical rigor with practical insights.""",
             verbose=True,
-            allow_delegation=False,
-            llm=self.physics_expert_llm
+            allow_delegation=True,
+            llm=self.precise_llm
         )
         
-        # 2. Creative Physics Researcher - Novel hypotheses and connections
-        agents['hypothesis_generator'] = Agent(
-            role='Creative Physics Researcher',
-            goal='Generate innovative hypotheses and discover novel theoretical connections',
-            backstory="""You are a brilliant theoretical physicist known for groundbreaking insights 
-            and creative thinking. You excel at finding unexpected connections between different physics 
-            domains, proposing testable hypotheses, and thinking outside conventional frameworks. 
-            You balance creativity with scientific rigor, always ensuring your ideas are grounded 
-            in established physics principles.""",
+        # Theoretical Physicist
+        theoretical_physicist = Agent(
+            role='Theoretical Physicist',
+            goal='Explore theoretical frameworks and mathematical models',
+            backstory="""You specialize in theoretical physics and mathematical modeling. You can derive 
+            equations from first principles and understand the deepest theoretical foundations of physics. 
+            You excel at connecting abstract concepts to observable phenomena.""",
             verbose=True,
             allow_delegation=False,
-            llm=self.hypothesis_generator_llm
+            llm=self.mathematical_llm
         )
         
-        # 3. Mathematical Physics Specialist - Quantitative analysis
-        agents['mathematical_analyst'] = Agent(
-            role='Mathematical Physics Specialist',
-            goal='Provide precise mathematical analysis and quantitative frameworks',
-            backstory="""You are a mathematical physicist who specializes in translating physical 
-            concepts into rigorous mathematical frameworks. You derive equations, perform quantitative 
-            analysis, and create mathematical models. Your expertise spans differential equations, 
-            linear algebra, complex analysis, and computational physics.""",
+        # Experimental Physics Consultant
+        experimental_consultant = Agent(
+            role='Experimental Physics Consultant',
+            goal='Design experiments and analyze practical implementation challenges',
+            backstory="""You are an expert in experimental physics with decades of hands-on experience. 
+            You know what works in practice, what equipment is needed, and what the limitations are. 
+            You can design feasible experiments and identify practical constraints.""",
             verbose=True,
             allow_delegation=False,
-            llm=self.mathematical_analyst_llm
+            llm=self.creative_llm
         )
         
-        # 4. Experimental Physics Designer - Practical testing approaches
-        agents['experimental_designer'] = Agent(
-            role='Experimental Physics Designer',
-            goal='Design feasible experiments to test theoretical predictions',
-            backstory="""You are an experienced experimental physicist who designs practical experiments 
-            to test theoretical predictions. You consider real-world constraints, measurement techniques, 
-            error analysis, and safety protocols. You bridge the gap between theory and practice, 
-            ensuring that proposed experiments are both scientifically valuable and practically feasible.""",
+        # Mathematical Analyst
+        mathematical_analyst = Agent(
+            role='Mathematical Analyst',
+            goal='Provide rigorous mathematical analysis and derivations',
+            backstory="""You are a mathematical physicist who excels at detailed calculations and 
+            mathematical modeling. You can derive complex equations, perform dimensional analysis, 
+            and provide quantitative estimates with proper uncertainty analysis.""",
             verbose=True,
             allow_delegation=False,
-            llm=self.experimental_designer_llm
+            llm=self.mathematical_llm
         )
         
-        # 5. Pattern Recognition Specialist - Data analysis and relationships
-        agents['pattern_analyst'] = Agent(
-            role='Pattern Recognition Specialist',
-            goal='Identify patterns, correlations, and hidden relationships in physics data',
-            backstory="""You are a data-driven physicist who excels at identifying patterns, correlations, 
-            and hidden relationships in complex physics data. You use statistical analysis, machine learning 
-            techniques, and visualization to uncover insights that might not be immediately obvious. 
-            You help connect theoretical predictions with observational evidence.""",
+        # Science Communicator
+        science_communicator = Agent(
+            role='Science Communicator',
+            goal='Synthesize complex physics into clear, accessible explanations',
+            backstory="""You excel at making complex physics concepts accessible to various audiences. 
+            You can take technical analysis and present it clearly while maintaining scientific accuracy. 
+            You know how to structure explanations and highlight key insights.""",
             verbose=True,
             allow_delegation=False,
-            llm=self.pattern_analyst_llm
+            llm=self.creative_llm
         )
         
-        # 6. Quantum Mechanics Specialist - Deep quantum expertise
-        agents['quantum_specialist'] = Agent(
-            role='Quantum Mechanics Specialist',
-            goal='Provide expert analysis of quantum mechanical phenomena and applications',
-            backstory="""You are a quantum mechanics expert with deep knowledge of quantum field theory, 
-            quantum information, quantum computing, and quantum foundations. You understand the mathematical 
-            formalism of quantum mechanics, from basic postulates to advanced topics like quantum entanglement, 
-            decoherence, and quantum measurement theory. You can explain complex quantum phenomena clearly 
-            and connect them to practical applications.""",
-            verbose=True,
-            allow_delegation=False,
-            llm=self.quantum_specialist_llm
-        )
-        
-        # 7. Relativity & Cosmology Expert - Spacetime and universe-scale physics
-        agents['relativity_expert'] = Agent(
-            role='Relativity & Cosmology Expert',
-            goal='Analyze spacetime, gravitational phenomena, and cosmological questions',
-            backstory="""You are an expert in general relativity, special relativity, and cosmology. 
-            You understand Einstein's field equations, black hole physics, gravitational waves, and 
-            the large-scale structure of the universe. You can work with curved spacetime mathematics, 
-            cosmological models, and connect relativity to observations from gravitational wave detectors 
-            and astronomical surveys.""",
-            verbose=True,
-            allow_delegation=False,
-            llm=self.relativity_expert_llm
-        )
-        
-        # 8. Condensed Matter Physicist - Materials and many-body systems
-        agents['condensed_matter_expert'] = Agent(
-            role='Condensed Matter Physicist',
-            goal='Analyze materials, phase transitions, and many-body quantum systems',
-            backstory="""You are a condensed matter physicist specializing in materials science, 
-            phase transitions, superconductivity, magnetism, and many-body quantum systems. You understand 
-            solid state physics, electronic band structure, collective phenomena, and emergent properties 
-            in materials. You can connect microscopic physics to macroscopic material properties.""",
-            verbose=True,
-            allow_delegation=False,
-            llm=self.condensed_matter_expert_llm
-        )
-        
-        # 9. Computational Physics Specialist - Numerical methods and simulations
-        agents['computational_physicist'] = Agent(
-            role='Computational Physics Specialist',
-            goal='Develop computational approaches and numerical solutions to physics problems',
-            backstory="""You are a computational physicist expert in numerical methods, Monte Carlo 
-            simulations, finite element analysis, and high-performance computing for physics problems. 
-            You can design algorithms, optimize code, and use computational tools to solve complex 
-            physics problems that are intractable analytically. You understand both the physics and 
-            the computational techniques needed to model physical systems.""",
-            verbose=True,
-            allow_delegation=False,
-            llm=self.computational_physicist_llm
-        )
-        
-        # 10. Physics Education & Communication Specialist - Making physics accessible
-        agents['physics_communicator'] = Agent(
-            role='Physics Education & Communication Specialist',
-            goal='Explain complex physics concepts clearly and develop educational approaches',
-            backstory="""You are a physics education specialist who excels at making complex physics 
-            concepts accessible to different audiences. You understand common misconceptions, can create 
-            analogies and visualizations, and know how to structure explanations for maximum clarity. 
-            You bridge the gap between expert knowledge and public understanding, ensuring that physics 
-            insights are communicated effectively.""",
-            verbose=True,
-            allow_delegation=False,
-            llm=self.physics_communicator_llm
-        )
-        
-        return agents
+        return [physics_expert, theoretical_physicist, experimental_consultant, 
+                mathematical_analyst, science_communicator]
     
-    def create_physics_analysis_crew(self, query: str, agents_to_use: List[str] = None) -> Crew:
-        """Create a crew for comprehensive physics analysis."""
+    def analyze_physics_query(self, query: str) -> str:
+        """
+        Analyze a physics query using the specialized crew.
         
-        if agents_to_use is None:
-            agents_to_use = ['physics_expert', 'hypothesis_generator', 'mathematical_analyst']
+        Args:
+            query: The physics question or problem to analyze
+            
+        Returns:
+            Comprehensive physics analysis
+        """
         
-        # Filter agents based on request
-        selected_agents = [self.agents[agent_name] for agent_name in agents_to_use if agent_name in self.agents]
-        
-        # Create tasks for each selected agent
-        tasks = []
-        
-        if 'physics_expert' in agents_to_use:
-            tasks.append(Task(
-                description=f"""
-                Provide a comprehensive physics analysis of: {query}
+        # Create specialized tasks for each agent
+        tasks = [
+            Task(
+                description=f"""Analyze this physics query and provide comprehensive expert analysis: '{query}'
                 
                 Your analysis should include:
-                - Relevant physical principles and fundamental laws
-                - Mathematical formulations and key equations
-                - Current theoretical understanding and established knowledge
-                - Experimental evidence and observational support
-                - Known limitations, uncertainties, and open questions
-                - Historical context and key contributors
+                1. Core physics principles involved
+                2. Relevant equations and laws
+                3. Key physical phenomena
+                4. Historical context and discoveries
+                5. Current understanding and research
+                6. Practical implications
                 
-                Ensure scientific accuracy and cite relevant experiments or observations.
-                """,
-                agent=self.agents['physics_expert'],
-                expected_output="Detailed physics analysis with equations, evidence, and scientific rigor"
-            ))
+                Provide a thorough, expert-level analysis.""",
+                agent=self.agents[0],  # Senior Physics Expert
+                expected_output="Comprehensive physics analysis with principles, equations, and context"
+            ),
+            
+            Task(
+                description=f"""Develop theoretical framework and mathematical models for: '{query}'
+                
+                Focus on:
+                1. Fundamental theoretical principles
+                2. Mathematical derivations from first principles
+                3. Symmetries and conservation laws
+                4. Quantum mechanical or relativistic effects if relevant
+                5. Theoretical predictions and implications
+                
+                Provide rigorous theoretical analysis.""",
+                agent=self.agents[1],  # Theoretical Physicist
+                expected_output="Theoretical framework with mathematical models and derivations"
+            ),
+            
+            Task(
+                description=f"""Design experimental approaches and analyze practical considerations for: '{query}'
+                
+                Address:
+                1. Experimental design and methodology
+                2. Required equipment and instrumentation
+                3. Measurement techniques and precision
+                4. Practical limitations and challenges
+                5. Safety considerations
+                6. Expected results and interpretation
+                
+                Provide practical experimental analysis.""",
+                agent=self.agents[2],  # Experimental Consultant
+                expected_output="Experimental design with practical implementation details"
+            ),
+            
+            Task(
+                description=f"""Perform detailed mathematical analysis and calculations for: '{query}'
+                
+                Include:
+                1. Detailed mathematical derivations
+                2. Numerical estimates and calculations
+                3. Dimensional analysis
+                4. Order of magnitude estimates
+                5. Uncertainty analysis
+                6. Graphical representations if helpful
+                
+                Provide rigorous mathematical treatment.""",
+                agent=self.agents[3],  # Mathematical Analyst
+                expected_output="Detailed mathematical analysis with calculations and estimates"
+            ),
+            
+            Task(
+                description=f"""Synthesize all previous analyses into a clear, comprehensive explanation of: '{query}'
+                
+                Create a well-structured response that:
+                1. Integrates insights from all specialists
+                2. Presents information in logical order
+                3. Explains complex concepts clearly
+                4. Highlights key takeaways
+                5. Addresses the original question directly
+                6. Provides a complete picture
+                
+                Make the physics accessible while maintaining accuracy.""",
+                agent=self.agents[4],  # Science Communicator
+                expected_output="Clear, comprehensive synthesis of all physics analysis"
+            )
+        ]
         
-        if 'hypothesis_generator' in agents_to_use:
-            tasks.append(Task(
-                description=f"""
-                Generate creative and innovative hypotheses related to: {query}
-                
-                Your response should provide:
-                - 2-3 novel, scientifically grounded hypotheses
-                - Testability criteria for each hypothesis
-                - Connections to other physics domains or emerging fields
-                - Potential implications for current theoretical frameworks
-                - Suggestions for future research directions
-                - Creative but scientifically sound speculation
-                
-                Balance creativity with scientific rigor and feasibility.
-                """,
-                agent=self.agents['hypothesis_generator'],
-                expected_output="Creative hypotheses with testability criteria and interdisciplinary connections"
-            ))
-        
-        if 'mathematical_analyst' in agents_to_use:
-            tasks.append(Task(
-                description=f"""
-                Provide detailed mathematical analysis for: {query}
-                
-                Your analysis should include:
-                - Relevant equations and mathematical derivations
-                - Quantitative relationships and scaling laws
-                - Mathematical modeling approaches and frameworks
-                - Numerical analysis considerations and computational methods
-                - Statistical or probabilistic treatments where appropriate
-                - Dimensional analysis and unit considerations
-                
-                Focus on mathematical rigor and quantitative precision.
-                """,
-                agent=self.agents['mathematical_analyst'],
-                expected_output="Mathematical framework with equations, derivations, and quantitative models"
-            ))
-        
-        if 'experimental_designer' in agents_to_use:
-            tasks.append(Task(
-                description=f"""
-                Design experimental approaches to investigate: {query}
-                
-                Your design should provide:
-                - Detailed experimental setup and methodology
-                - Required instrumentation and measurement techniques
-                - Control variables and experimental protocols
-                - Expected results and data analysis methods
-                - Error analysis and uncertainty quantification
-                - Practical considerations, limitations, and safety protocols
-                - Alternative experimental approaches if applicable
-                
-                Ensure experiments are feasible with current or near-future technology.
-                """,
-                agent=self.agents['experimental_designer'],
-                expected_output="Detailed experimental design with protocols, instrumentation, and analysis methods"
-            ))
-        
-        if 'pattern_analyst' in agents_to_use:
-            tasks.append(Task(
-                description=f"""
-                Analyze patterns and relationships related to: {query}
-                
-                Your analysis should identify:
-                - Statistical patterns and correlations in relevant data
-                - Scaling relationships and power laws
-                - Symmetries and conservation principles
-                - Emergent phenomena and collective behaviors
-                - Data visualization and interpretation strategies
-                - Connections between seemingly unrelated observations
-                - Predictive patterns and trend analysis
-                
-                Focus on data-driven insights and quantitative pattern recognition.
-                """,
-                agent=self.agents['pattern_analyst'],
-                expected_output="Pattern analysis with statistical insights, correlations, and data-driven conclusions"
-            ))
-        
-        if 'quantum_specialist' in agents_to_use:
-            tasks.append(Task(
-                description=f"""
-                Provide expert quantum mechanical analysis for: {query}
-                
-                Your analysis should cover:
-                - Quantum mechanical principles and formalism
-                - Quantum field theory considerations where relevant
-                - Quantum information and entanglement aspects
-                - Decoherence and measurement theory
-                - Quantum computing and quantum technology applications
-                - Quantum foundations and interpretational issues
-                - Connection to experimental quantum physics
-                
-                Focus on rigorous quantum mechanical treatment and modern applications.
-                """,
-                agent=self.agents['quantum_specialist'],
-                expected_output="Expert quantum mechanical analysis with rigorous formalism and applications"
-            ))
-        
-        if 'relativity_expert' in agents_to_use:
-            tasks.append(Task(
-                description=f"""
-                Analyze spacetime and gravitational aspects of: {query}
-                
-                Your analysis should include:
-                - General and special relativity considerations
-                - Spacetime geometry and curvature effects
-                - Black hole physics and thermodynamics
-                - Cosmological implications and models
-                - Gravitational wave physics
-                - Connection to observational astronomy and cosmology
-                - Mathematical treatment using tensor calculus
-                
-                Focus on relativistic physics and cosmological perspectives.
-                """,
-                agent=self.agents['relativity_expert'],
-                expected_output="Relativistic analysis with spacetime geometry and cosmological insights"
-            ))
-        
-        if 'condensed_matter_expert' in agents_to_use:
-            tasks.append(Task(
-                description=f"""
-                Analyze condensed matter and materials aspects of: {query}
-                
-                Your analysis should cover:
-                - Solid state physics and electronic properties
-                - Phase transitions and critical phenomena
-                - Many-body quantum systems and collective behavior
-                - Superconductivity and magnetism
-                - Emergent properties and symmetry breaking
-                - Materials science applications
-                - Connection to experimental condensed matter physics
-                
-                Focus on many-body physics and emergent phenomena in materials.
-                """,
-                agent=self.agents['condensed_matter_expert'],
-                expected_output="Condensed matter analysis with many-body physics and materials insights"
-            ))
-        
-        if 'computational_physicist' in agents_to_use:
-            tasks.append(Task(
-                description=f"""
-                Develop computational approaches for: {query}
-                
-                Your analysis should provide:
-                - Numerical methods and algorithms
-                - Computational modeling strategies
-                - Monte Carlo and molecular dynamics approaches
-                - High-performance computing considerations
-                - Code optimization and parallel processing
-                - Visualization and data analysis techniques
-                - Computational complexity and scaling
-                
-                Focus on practical computational solutions and numerical methods.
-                """,
-                agent=self.agents['computational_physicist'],
-                expected_output="Computational framework with numerical methods and algorithmic approaches"
-            ))
-        
-        if 'physics_communicator' in agents_to_use:
-            tasks.append(Task(
-                description=f"""
-                Explain and communicate the physics concepts in: {query}
-                
-                Your response should provide:
-                - Clear, accessible explanations for different audiences
-                - Analogies and visualizations to aid understanding
-                - Common misconceptions and how to address them
-                - Educational approaches and learning strategies
-                - Connection to everyday experiences and applications
-                - Summary of key insights in plain language
-                - Suggestions for further learning and exploration
-                
-                Focus on making complex physics accessible and engaging.
-                """,
-                agent=self.agents['physics_communicator'],
-                expected_output="Clear educational explanation with analogies and accessible insights"
-            ))
-        
-        # Create and return the crew
+        # Create crew with enhanced telemetry enabled
         crew = Crew(
-            agents=selected_agents,
+            agents=self.agents,
             tasks=tasks,
-            process=Process.sequential,  # Can be changed to hierarchical if needed
-            verbose=True,
-            memory=False,  # Disable memory to avoid ChromaDB issues on Streamlit Cloud
+            process=Process.sequential,
+            verbose=True,              # Enable detailed logging
+            share_crew=True,          # Enable enhanced telemetry
+            max_rpm=30,               # Rate limiting
+            memory=True               # Enable crew memory
         )
         
-        return crew
-    
-    def analyze_physics_query(self, query: str, agents_to_use: List[str] = None) -> Dict[str, Any]:
-        """Analyze a physics query using the multi-agent crew."""
+        # Execute the analysis
+        print(f"🚀 Starting physics analysis: {query}")
+        print("=" * 80)
         
-        print(f"🚀 PhysicsGPT Multi-Agent Analysis")
-        print(f"=" * 60)
-        print(f"📋 Query: {query}")
+        result = crew.kickoff()
         
-        # Default to using 5 core agents if none specified
-        if not agents_to_use:
-            agents_to_use = [
-                'physics_expert',
-                'hypothesis_generator', 
-                'mathematical_analyst',
-                'quantum_specialist',
-                'physics_communicator'
-            ]
+        print("=" * 80)
+        print("✅ Analysis complete!")
         
-        print(f"🤖 Selected Agents: {', '.join(agents_to_use)}")
-        print(f"🔄 Processing with CrewAI...")
-        print()
-        
-        try:
-            # Create the crew
-            crew = self.create_physics_analysis_crew(query, agents_to_use)
-            
-            # Execute the analysis
-            result = crew.kickoff()
-            
-            print(f"✅ Analysis Complete!")
-            print(f"=" * 60)
-            
-            return {
-                "success": True,
-                "query": query,
-                "result": result,
-                "agents_used": agents_to_use or ['physics_expert', 'hypothesis_generator', 'mathematical_analyst'],
-                "crew_size": len(crew.agents)
-            }
-            
-        except Exception as e:
-            print(f"❌ Analysis Failed: {str(e)}")
-            return {
-                "success": False,
-                "query": query,
-                "error": str(e),
-                "agents_used": agents_to_use or []
-            }
+        return result
 
 
 def main():
@@ -504,12 +248,9 @@ def main():
         query = " ".join(sys.argv[1:])
         result = physics_crew.analyze_physics_query(query)
         
-        if result['success']:
-            print("\n📄 ANALYSIS RESULT:")
-            print("=" * 50)
-            print(result['result'])
-        else:
-            print(f"\n❌ Analysis failed: {result['error']}")
+        print("\n📄 ANALYSIS RESULT:")
+        print("=" * 50)
+        print(result)
         return
     
     # Interactive mode
@@ -527,12 +268,9 @@ def main():
                 query = input("\n🔬 Enter your physics question: ").strip()
                 if query:
                     result = physics_crew.analyze_physics_query(query)
-                    if result['success']:
-                        print("\n📄 COMPREHENSIVE ANALYSIS:")
-                        print("=" * 50)
-                        print(result['result'])
-                    else:
-                        print(f"\n❌ Analysis failed: {result['error']}")
+                    print("\n📄 COMPREHENSIVE ANALYSIS:")
+                    print("=" * 50)
+                    print(result)
                 else:
                     print("❌ Please enter a valid question.")
                 break
@@ -555,13 +293,10 @@ def main():
                 
                 query = input("🔬 Enter your physics question: ").strip()
                 if query and agents_to_use:
-                    result = physics_crew.analyze_physics_query(query, agents_to_use)
-                    if result['success']:
-                        print("\n📄 SPECIALIZED ANALYSIS:")
-                        print("=" * 50)
-                        print(result['result'])
-                    else:
-                        print(f"\n❌ Analysis failed: {result['error']}")
+                    result = physics_crew.analyze_physics_query(query)
+                    print("\n📄 SPECIALIZED ANALYSIS:")
+                    print("=" * 50)
+                    print(result)
                 else:
                     print("❌ Please enter a valid question and agents.")
                 break
@@ -580,14 +315,11 @@ def main():
                     'physics_communicator'
                 ]
                 
-                result = physics_crew.analyze_physics_query(demo_query, all_agents)
+                result = physics_crew.analyze_physics_query(demo_query)
                 
-                if result['success']:
-                    print("\n📄 DEMO ANALYSIS RESULT:")
-                    print("=" * 50)
-                    print(result['result'])
-                else:
-                    print(f"\n❌ Demo failed: {result['error']}")
+                print("\n📄 DEMO ANALYSIS RESULT:")
+                print("=" * 50)
+                print(result)
                 break
                 
             elif choice == "4":

@@ -1,585 +1,234 @@
 #!/usr/bin/env python3
+
 """
-PhysicsGPT - Agent Conversations UI
-Shows real-time agent thoughts, decisions, and progress.
+Real-time Agent Conversations Viewer
+A Streamlit app that shows agent conversations in real-time using CrewAI's built-in telemetry.
 """
 
-# Fix SQLite version issue for Streamlit Cloud BEFORE importing anything else
-try:
-    __import__('pysqlite3')
-    import sys
-    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
-except ImportError:
-    pass
+# Fix for SQLite issues on Streamlit Cloud
+__import__('pysqlite3')
+import sys
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 import streamlit as st
-import time
 import threading
+import time
+import os
 from datetime import datetime
-import plotly.graph_objects as go
-import plotly.express as px
-import pandas as pd
-
-# Import our modules
 from physics_crew_system import PhysicsGPTCrew
-from agent_monitor import agent_monitor, simulate_agent_progress
 
 # Page configuration
 st.set_page_config(
-    page_title="PhysicsGPT - Agent Conversations",
-    page_icon="🧠",
+    page_title="🚀 PhysicsGPT Agent Conversations",
+    page_icon="🤖",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for conversation UI
+# Custom CSS for better styling
 st.markdown("""
 <style>
-    .conversation-card {
-        background: #f8f9fa;
-        padding: 1rem;
+    .main-header {
+        text-align: center;
+        padding: 2rem 0;
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        color: white;
         border-radius: 10px;
-        border-left: 4px solid #3B82F6;
+        margin-bottom: 2rem;
+    }
+    .agent-card {
+        border: 1px solid #e1e5e9;
+        border-radius: 8px;
+        padding: 1rem;
         margin: 0.5rem 0;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        background-color: #f8f9fa;
     }
-    .agent-active {
-        border-left: 4px solid #10B981;
-        background: #ecfdf5;
-    }
-    .agent-completed {
-        border-left: 4px solid #6B7280;
-        background: #f9fafb;
-        opacity: 0.8;
-    }
-    .thought-bubble {
-        background: #e0f2fe;
-        padding: 0.5rem;
-        border-radius: 8px;
-        margin: 0.25rem 0;
-        border-left: 3px solid #0288d1;
-    }
-    .decision-bubble {
-        background: #f3e5f5;
-        padding: 0.5rem;
-        border-radius: 8px;
-        margin: 0.25rem 0;
-        border-left: 3px solid #7b1fa2;
-    }
-    .question-bubble {
-        background: #fff3e0;
-        padding: 0.5rem;
-        border-radius: 8px;
-        margin: 0.25rem 0;
-        border-left: 3px solid #f57c00;
-    }
-    .progress-container {
-        background: #ffffff;
-        padding: 0.5rem;
+    .success-message {
+        background-color: #d4edda;
+        border-color: #c3e6cb;
+        color: #155724;
+        padding: 10px;
         border-radius: 5px;
-        margin: 0.5rem 0;
+        margin: 10px 0;
     }
-    .agent-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 0.5rem;
-    }
-    .status-badge {
-        padding: 0.25rem 0.5rem;
-        border-radius: 12px;
-        font-size: 0.8rem;
-        font-weight: bold;
-    }
-    .status-thinking {
-        background: #dbeafe;
-        color: #1e40af;
-    }
-    .status-completed {
-        background: #dcfce7;
-        color: #166534;
+    .info-message {
+        background-color: #d1ecf1;
+        border-color: #bee5eb;
+        color: #0c5460;
+        padding: 10px;
+        border-radius: 5px;
+        margin: 10px 0;
     }
 </style>
 """, unsafe_allow_html=True)
 
 def initialize_session_state():
     """Initialize session state variables."""
+    if 'system_ready' not in st.session_state:
+        st.session_state.system_ready = False
     if 'physics_crew' not in st.session_state:
         st.session_state.physics_crew = None
-        st.session_state.system_ready = False
-        
-    if 'monitoring_active' not in st.session_state:
-        st.session_state.monitoring_active = False
-        
     if 'analysis_running' not in st.session_state:
         st.session_state.analysis_running = False
-        
-    if 'conversations' not in st.session_state:
-        st.session_state.conversations = {}
-        
+    if 'analysis_result' not in st.session_state:
+        st.session_state.analysis_result = None
+    if 'analysis_error' not in st.session_state:
+        st.session_state.analysis_error = None
     if 'last_update' not in st.session_state:
         st.session_state.last_update = time.time()
 
-def update_conversations_callback(conversations):
-    """Callback to update conversations in session state."""
-    try:
-        # Convert AgentConversation objects to dictionaries for session state
-        if conversations:
-            converted_conversations = {}
-            for name, conv in conversations.items():
-                if hasattr(conv, 'to_dict'):
-                    # It's an AgentConversation object, convert to dict
-                    converted_conversations[name] = conv.to_dict()
-                else:
-                    # It's already a dict
-                    converted_conversations[name] = conv
-            st.session_state.conversations = converted_conversations
-        else:
-            st.session_state.conversations = {}
-        
-        st.session_state.last_update = time.time()
-        print(f"🔄 Updated conversations: {len(st.session_state.conversations)} active")
-    except Exception as e:
-        print(f"❌ Error in update callback: {e}")
-        st.session_state.conversations = {}
-        st.session_state.last_update = time.time()
+def start_analysis(query: str):
+    """Start the agent analysis with CrewAI's built-in telemetry."""
+    st.session_state.analysis_running = True
+    st.session_state.analysis_result = None
+    st.session_state.analysis_error = None
+    
+    def run_analysis():
+        try:
+            # Run the physics analysis
+            result = st.session_state.physics_crew.analyze_physics_query(query)
+            st.session_state.analysis_result = result
+            st.session_state.analysis_running = False
+            st.session_state.last_update = time.time()
+        except Exception as e:
+            st.session_state.analysis_error = str(e)
+            st.session_state.analysis_running = False
+            st.session_state.last_update = time.time()
+    
+    # Start analysis in background thread
+    analysis_thread = threading.Thread(target=run_analysis)
+    analysis_thread.daemon = True
+    analysis_thread.start()
+
+def stop_analysis():
+    """Stop the running analysis."""
+    st.session_state.analysis_running = False
+    st.session_state.analysis_result = None
+    st.session_state.analysis_error = None
 
 def main():
+    """Main Streamlit application."""
+    
+    # Initialize session state
     initialize_session_state()
     
     # Header
-    st.markdown("""
-    <div style="background: linear-gradient(90deg, #1E3A8A 0%, #3B82F6 100%); 
-                padding: 1.5rem; border-radius: 10px; color: white; text-align: center; margin-bottom: 1rem;">
-        <h1>🧠 PhysicsGPT Agent Conversations</h1>
-        <h3>Real-time Agent Thoughts & Decision Making</h3>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown('<div class="main-header"><h1>🚀 PhysicsGPT Agent Conversations</h1><p>Real-time AI Agent Collaboration with Enhanced Telemetry</p></div>', unsafe_allow_html=True)
     
     # Initialize system if needed
     if not st.session_state.system_ready:
-        with st.spinner("🚀 Initializing PhysicsGPT system..."):
+        with st.spinner("🚀 Initializing PhysicsGPT system with enhanced telemetry..."):
             try:
                 st.session_state.physics_crew = PhysicsGPTCrew()
-                agent_monitor.add_update_callback(update_conversations_callback)
                 st.session_state.system_ready = True
-                st.success("✅ System initialized successfully!")
+                st.success("✅ System initialized successfully with CrewAI enhanced telemetry!")
             except Exception as e:
                 st.error(f"❌ Failed to initialize system: {e}")
                 st.error("Please check your OpenAI API key and internet connection.")
                 return
     else:
         # Show a small status indicator when system is ready
-        st.success("✅ PhysicsGPT System Ready")
-        
-        # Ensure callback is registered even if system was already ready
-        if update_conversations_callback not in agent_monitor.update_callbacks:
-            agent_monitor.add_update_callback(update_conversations_callback)
-            print("🔄 Re-registered update callback")
+        st.success("✅ PhysicsGPT System Ready with Enhanced Telemetry")
+    
+    # Main layout with two columns
+    col1, col2 = st.columns([1, 2])
     
     # Sidebar - Controls
     with st.sidebar:
         st.header("🎛️ Control Panel")
         
-        # Add prominent diagnostic section at the top
-        st.subheader("🔧 Debug Tools")
-        col_diag1, col_diag2 = st.columns(2)
-        with col_diag1:
-            if st.button("🔧 Diagnostics", type="secondary"):
-                run_diagnostics()
-        with col_diag2:
-            if st.button("🧪 Test Monitor", type="secondary"):
-                test_monitoring_system()
-        
-        st.divider()
-        
-        # Agent selection
-        st.subheader("🤖 Select Agents")
-        agent_options = {
-            'physics_expert': '🧠 Physics Expert',
-            'hypothesis_generator': '💡 Hypothesis Generator', 
-            'mathematical_analyst': '📊 Mathematical Analyst',
-            'quantum_specialist': '⚛️ Quantum Specialist',
-            'experimental_designer': '🔬 Experimental Designer',
-            'pattern_analyst': '📈 Pattern Analyst',
-            'relativity_expert': '🌌 Relativity Expert',
-            'condensed_matter_expert': '🔧 Condensed Matter Expert',
-            'computational_physicist': '💻 Computational Physicist',
-            'physics_communicator': '📚 Physics Communicator'
-        }
-        
-        # Quick selection modes
-        mode = st.radio(
-            "Selection Mode:",
-            ["🎯 5 Core Agents", "🚀 All 10 Agents", "🔧 Custom Selection"]
-        )
-        
-        if mode == "🎯 5 Core Agents":
-            selected_agents = ['physics_expert', 'hypothesis_generator', 'mathematical_analyst', 
-                             'quantum_specialist', 'physics_communicator']
-        elif mode == "🚀 All 10 Agents":
-            selected_agents = list(agent_options.keys())
-        else:
-            selected_agents = []
-            for key, label in agent_options.items():
-                if st.checkbox(label, key=f"agent_{key}"):
-                    selected_agents.append(key)
-        
-        st.write(f"**Selected:** {len(selected_agents)} agents")
-        
-        # Demo mode toggle
-        st.subheader("🎮 Demo Mode")
-        demo_mode = st.checkbox("Enable Demo Mode (Simulated Conversations)")
-        
-        if demo_mode:
-            st.info("Demo mode will simulate agent conversations for testing the UI")
-    
-    # Main content area
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        st.header("🔬 Physics Query")
-        
         # Query input
+        st.subheader("🔬 Physics Query")
         query = st.text_area(
             "Enter your physics question:",
-            placeholder="e.g., How does quantum entanglement relate to black hole thermodynamics?",
+            placeholder="How to detect dark matter in a room?",
             height=100
         )
         
-        # Example queries
-        with st.expander("💡 Example Queries"):
-            examples = [
-                "What is dark matter and how do we detect it?",
-                "How does quantum entanglement work in quantum computing?",
-                "Explain the relationship between entropy and information theory",
-                "How do gravitational waves propagate through spacetime?",
-                "What are the implications of the holographic principle?"
-            ]
-            
-            for i, example in enumerate(examples):
-                if st.button(f"📝 {example}", key=f"example_{i}"):
-                    query = example
+        # Control buttons
+        col_start, col_stop = st.columns(2)
+        
+        with col_start:
+            if st.button("🚀 Start Analysis", disabled=st.session_state.analysis_running):
+                if query.strip():
+                    start_analysis(query.strip())
                     st.rerun()
+                else:
+                    st.warning("Please enter a physics question first!")
         
-        # Analysis controls
-        st.subheader("🚀 Analysis Controls")
-        
-        if not st.session_state.analysis_running:
-            if st.button("🧠 Start Agent Analysis", type="primary", 
-                        disabled=not query or not selected_agents):
-                if query and selected_agents:
-                    start_analysis(query, selected_agents, demo_mode)
-        else:
-            if st.button("⏹️ Stop Analysis", type="secondary"):
+        with col_stop:
+            if st.button("🛑 Stop Analysis", disabled=not st.session_state.analysis_running):
                 stop_analysis()
-                
-        # System status
-        st.subheader("📊 System Status")
-        summary = agent_monitor.get_conversation_summary()
-        
-        col_a, col_b = st.columns(2)
-        with col_a:
-            st.metric("Active Agents", summary.get('active_agents', 0))
-            st.metric("Total Interactions", summary.get('total_interactions', 0))
-        with col_b:
-            st.metric("Completed Agents", summary.get('completed_agents', 0))
-            st.metric("Total Agents", summary.get('total_agents', 0))
-        
-        # Add diagnostic button
-        if st.button("🔧 Run Diagnostics"):
-            run_diagnostics()
-        
-        # Add test monitoring button
-        if st.button("🧪 Test Monitoring"):
-            test_monitoring_system()
-    
-    with col2:
-        st.header("🤖 Agent Conversations")
-        
-        # Auto-refresh toggle
-        auto_refresh = st.checkbox("🔄 Auto-refresh (every 2 seconds)", value=True)
-        
-        if auto_refresh and st.session_state.analysis_running:
-            time.sleep(2)
-            st.rerun()
-        
-        # Check for analysis errors and display them
-        if hasattr(st.session_state, 'analysis_error') and st.session_state.analysis_error:
-            st.error(f"❌ Analysis Error: {st.session_state.analysis_error}")
-            if st.button("🔄 Clear Error"):
-                del st.session_state.analysis_error
                 st.rerun()
         
-        # Check for analysis results and display them
-        if hasattr(st.session_state, 'analysis_result') and st.session_state.analysis_result:
-            result = st.session_state.analysis_result
-            if result.get('success'):
-                st.success("✅ Analysis completed successfully!")
-                with st.expander("📄 View Analysis Result", expanded=True):
-                    st.markdown(result.get('result', 'No result available'))
-            else:
-                st.error(f"❌ Analysis failed: {result.get('error', 'Unknown error')}")
-        
-        # Display conversations
-        conversations = st.session_state.conversations
-        
-        if not conversations:
-            if st.session_state.analysis_running:
-                st.info("🔄 Analysis is running... Waiting for agent conversations to appear...")
-                # Add some debugging info
-                st.caption(f"Monitoring active: {agent_monitor.monitoring}")
-                st.caption(f"Last update: {st.session_state.last_update}")
-            else:
-                st.info("👋 Start an analysis to see agent conversations in real-time!")
+        # System status
+        st.subheader("📊 System Status")
+        if st.session_state.analysis_running:
+            st.info("🔄 Analysis in progress...")
+        elif st.session_state.analysis_result:
+            st.success("✅ Analysis completed")
+        elif st.session_state.analysis_error:
+            st.error("❌ Analysis failed")
         else:
-            # Sort conversations by start time - handle both dict and AgentConversation objects
-            try:
-                sorted_conversations = sorted(
-                    conversations.values(), 
-                    key=lambda x: x.get('start_time', 0) if hasattr(x, 'get') else getattr(x, 'start_time', 0)
-                )
-            except Exception as e:
-                st.error(f"Error sorting conversations: {e}")
-                # Fallback: just use the conversations as-is
-                sorted_conversations = list(conversations.values())
+            st.info("⏳ Ready for analysis")
+        
+        # Telemetry info
+        st.subheader("📡 Telemetry Info")
+        st.info("**Enhanced Telemetry**: ✅ Enabled\n\n**Data Collection**: CrewAI automatically collects comprehensive execution data including agent interactions, task progress, and crew performance metrics.")
+        
+        st.caption("Using CrewAI's built-in telemetry system with `share_crew=True` for enhanced monitoring.")
+    
+    # Main content area
+    with col1:
+        st.header("📊 Analysis Status")
+        
+        if st.session_state.analysis_running:
+            st.info("🔄 **Analysis Running**\n\nThe physics crew is analyzing your query. CrewAI's enhanced telemetry is automatically capturing all agent interactions and task progress.")
             
-            for conv_data in sorted_conversations:
-                # Convert AgentConversation object to dict if needed
-                if hasattr(conv_data, 'to_dict'):
-                    conv_data = conv_data.to_dict()
-                display_agent_conversation(conv_data)
-
-def display_agent_conversation(conv_data):
-    """Display a single agent conversation."""
-    agent_name = conv_data['agent_name']
-    status = conv_data['status']
-    progress = conv_data['progress_percentage']
-    current_step = conv_data['current_step']
+            # Auto-refresh during analysis
+            time.sleep(2)
+            st.rerun()
+            
+        elif st.session_state.analysis_error:
+            st.error(f"❌ **Analysis Error**\n\n{st.session_state.analysis_error}")
+            if st.button("🔄 Clear Error"):
+                st.session_state.analysis_error = None
+                st.rerun()
+                
+        elif st.session_state.analysis_result:
+            st.success("✅ **Analysis Complete**\n\nThe physics crew has successfully completed the analysis. View the detailed results in the right panel.")
+            
+        else:
+            st.info("👋 **Ready for Analysis**\n\nEnter a physics question in the sidebar and click 'Start Analysis' to begin. The system will use CrewAI's enhanced telemetry to capture all agent conversations.")
     
-    # Determine card style
-    card_class = "conversation-card"
-    if status == "thinking":
-        card_class += " agent-active"
-    elif status == "completed":
-        card_class += " agent-completed"
+    with col2:
+        st.header("📄 Analysis Results")
+        
+        if st.session_state.analysis_result:
+            st.markdown("### 🎯 Physics Analysis Result")
+            
+            # Display the result in an expandable section
+            with st.expander("📋 Full Analysis", expanded=True):
+                st.markdown(st.session_state.analysis_result)
+            
+            # Show telemetry note
+            st.info("📡 **Telemetry Note**: This analysis was performed with CrewAI's enhanced telemetry enabled, capturing detailed agent interactions, task execution data, and crew performance metrics.")
+            
+        elif st.session_state.analysis_running:
+            st.info("🔄 Analysis in progress... Results will appear here when complete.")
+            
+        else:
+            st.info("👋 Start an analysis to see comprehensive physics results here!")
     
-    # Agent header
-    st.markdown(f"""
-    <div class="{card_class}">
-        <div class="agent-header">
-            <h4>🤖 {agent_name.replace('_', ' ').title()}</h4>
-            <span class="status-badge status-{status}">{status.title()}</span>
-        </div>
+    # Footer
+    st.markdown("---")
+    st.markdown("""
+    <div style='text-align: center; color: #666;'>
+        🚀 PhysicsGPT with CrewAI Enhanced Telemetry | 
+        Built with Streamlit, CrewAI, and OpenAI | 
+        <strong>share_crew=True</strong> for comprehensive monitoring
     </div>
     """, unsafe_allow_html=True)
-    
-    # Progress bar
-    if status == "thinking":
-        st.progress(progress / 100.0)
-        st.caption(f"📍 {current_step}")
-    
-    # Conversation content
-    with st.expander(f"💭 Conversation Details ({conv_data['total_interactions']} interactions)", 
-                     expanded=(status == "thinking")):
-        
-        # Thoughts
-        thoughts = conv_data.get('thoughts', [])
-        if thoughts:
-            st.subheader("💭 Thoughts")
-            for thought in thoughts[-5:]:  # Show last 5 thoughts
-                timestamp = datetime.fromtimestamp(thought['timestamp']).strftime("%H:%M:%S")
-                st.markdown(f"""
-                <div class="thought-bubble">
-                    <small>{timestamp}</small><br>
-                    {thought['content']}
-                </div>
-                """, unsafe_allow_html=True)
-        
-        # Decisions
-        decisions = conv_data.get('decisions', [])
-        if decisions:
-            st.subheader("🎯 Decisions")
-            for decision in decisions[-3:]:  # Show last 3 decisions
-                timestamp = datetime.fromtimestamp(decision['timestamp']).strftime("%H:%M:%S")
-                st.markdown(f"""
-                <div class="decision-bubble">
-                    <small>{timestamp}</small><br>
-                    <strong>Decision:</strong> {decision['decision']}<br>
-                    {f"<strong>Reasoning:</strong> {decision['reasoning']}" if decision.get('reasoning') else ""}
-                </div>
-                """, unsafe_allow_html=True)
-        
-        # Questions
-        questions = conv_data.get('questions', [])
-        if questions:
-            st.subheader("❓ Questions")
-            for question in questions[-3:]:  # Show last 3 questions
-                timestamp = datetime.fromtimestamp(question['timestamp']).strftime("%H:%M:%S")
-                st.markdown(f"""
-                <div class="question-bubble">
-                    <small>{timestamp}</small><br>
-                    {question['question']}
-                </div>
-                """, unsafe_allow_html=True)
-        
-        # Final output
-        if status == "completed" and conv_data.get('final_output'):
-            st.subheader("📄 Final Output")
-            st.markdown(conv_data['final_output'][:500] + "..." if len(conv_data['final_output']) > 500 else conv_data['final_output'])
-
-def start_analysis(query, selected_agents, demo_mode):
-    """Start the agent analysis."""
-    st.session_state.analysis_running = True
-    
-    # Clear previous errors and results
-    if hasattr(st.session_state, 'analysis_error'):
-        del st.session_state.analysis_error
-    if hasattr(st.session_state, 'analysis_result'):
-        del st.session_state.analysis_result
-    
-    agent_monitor.start_monitoring()
-    
-    if demo_mode:
-        # Start demo simulations
-        for agent in selected_agents:
-            task_desc = f"Analyzing: {query[:50]}..."
-            thread = threading.Thread(
-                target=simulate_agent_progress,
-                args=(agent, task_desc, 20)  # 20 second simulation
-            )
-            thread.daemon = True
-            thread.start()
-    else:
-        # Start real analysis with monitored CrewAI
-        def run_real_analysis():
-            try:
-                print(f"🚀 Starting real analysis with monitoring enabled")
-                print(f"📋 Query: {query}")
-                print(f"🤖 Selected agents: {selected_agents}")
-                
-                # Create physics crew with monitoring enabled
-                monitored_crew = PhysicsGPTCrew(enable_monitoring=True)
-                print(f"✅ Physics crew created successfully")
-                
-                # Run the analysis
-                print(f"🔄 Running analysis...")
-                result = monitored_crew.analyze_physics_query(query, selected_agents)
-                print(f"📊 Analysis result: {result}")
-                
-                # Store result in session state
-                st.session_state.analysis_result = result
-                st.session_state.analysis_running = False
-                print(f"✅ Analysis completed and stored in session state")
-                
-            except Exception as e:
-                print(f"❌ Analysis failed with error: {str(e)}")
-                import traceback
-                traceback.print_exc()
-                st.session_state.analysis_error = str(e)
-                st.session_state.analysis_running = False
-        
-        # Start analysis in background thread
-        analysis_thread = threading.Thread(target=run_real_analysis)
-        analysis_thread.daemon = True
-        analysis_thread.start()
-        print(f"🔄 Analysis thread started")
-        
-    st.rerun()
-
-def stop_analysis():
-    """Stop the agent analysis."""
-    st.session_state.analysis_running = False
-    agent_monitor.stop_monitoring()
-    st.rerun()
-
-def run_diagnostics():
-    """Run diagnostic functions to check monitoring system."""
-    st.info("🔧 Running Diagnostics...")
-    
-    # Check if monitoring is active
-    if agent_monitor.monitoring:
-        st.success("✅ Monitoring is active")
-        st.caption(f"Conversations: {len(agent_monitor.conversations)}")
-        st.caption(f"Active agents: {len(agent_monitor.active_agents)}")
-    else:
-        st.warning("⚠️ Monitoring is not active")
-    
-    # Check if callbacks are registered
-    if agent_monitor.update_callbacks:
-        st.success(f"✅ {len(agent_monitor.update_callbacks)} update callbacks registered")
-    else:
-        st.warning("⚠️ No update callbacks registered - conversations won't update")
-    
-    # Check if CrewAI is initialized
-    if st.session_state.physics_crew:
-        st.success("✅ Physics crew is initialized")
-    else:
-        st.error("❌ Physics crew is not initialized")
-    
-    # Test monitored LLM creation
-    try:
-        from monitored_llm import create_monitored_llm
-        test_llm = create_monitored_llm("test_agent", temperature=0.1)
-        st.success("✅ Monitored LLM creation works")
-    except Exception as e:
-        st.error(f"❌ Monitored LLM creation failed: {e}")
-    
-    # Check session state
-    st.subheader("Session State Debug")
-    st.json({
-        "analysis_running": st.session_state.analysis_running,
-        "system_ready": st.session_state.system_ready,
-        "monitoring_active": st.session_state.monitoring_active,
-        "last_update": st.session_state.last_update,
-        "conversations_count": len(st.session_state.conversations),
-        "has_analysis_error": hasattr(st.session_state, 'analysis_error'),
-        "has_analysis_result": hasattr(st.session_state, 'analysis_result')
-    })
-    
-    st.info("🔧 Diagnostics complete")
-
-def test_monitoring_system():
-    """Manually trigger a test of the monitoring system."""
-    st.info("🧪 Testing Monitoring System...")
-    try:
-        # Force start monitoring
-        agent_monitor.start_monitoring()
-        print("🚀 Forced monitoring start")
-        
-        # Ensure callback is registered
-        if update_conversations_callback not in agent_monitor.update_callbacks:
-            agent_monitor.add_update_callback(update_conversations_callback)
-            print("🔄 Added callback during test")
-        
-        # Simulate a simple interaction
-        print("Simulating a simple interaction...")
-        test_agent = "test_agent"
-        test_task = "Testing the monitoring system."
-        
-        # Use agent_monitor directly to simulate conversation
-        agent_monitor.start_agent_conversation(test_agent, test_task)
-        
-        # Simulate progress updates
-        agent_monitor.update_agent_progress(test_agent, 25, "Processing test data...")
-        agent_monitor.add_agent_thought(test_agent, "This is a test thought to verify the monitoring system works.")
-        agent_monitor.add_agent_decision(test_agent, "Proceed with test validation", "System appears to be functioning correctly")
-        agent_monitor.update_agent_progress(test_agent, 75, "Finalizing test...")
-        agent_monitor.add_agent_thought(test_agent, "Test is nearly complete. All systems nominal.")
-        agent_monitor.update_agent_progress(test_agent, 100, "Test complete")
-        agent_monitor.complete_agent_conversation(test_agent, "✅ Monitoring system test completed successfully! The conversation tracking is working properly.")
-        
-        # Force update the UI
-        print(f"🔄 Test complete, updating UI with {len(agent_monitor.conversations)} conversations")
-        
-        st.success("✅ Monitoring system test completed successfully!")
-        st.info("🔄 Check the Agent Conversations panel to see the test conversation.")
-        st.rerun()
-    except Exception as e:
-        st.error(f"❌ Monitoring system test failed: {e}")
-        import traceback
-        traceback.print_exc()
-        st.rerun()
 
 if __name__ == "__main__":
     main()
