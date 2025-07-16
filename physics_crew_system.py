@@ -41,39 +41,40 @@ class PhysicsGPTCrew:
         self.agents = self._create_agents()
         
     def _create_agents(self):
-        """Create specialized physics agents with distinct roles."""
+        """Create specialized physics agents with proper delegation setup."""
         
-        # Senior Physics Expert
+        # Senior Physics Expert - The coordinator
         physics_expert = Agent(
             role='Senior Physics Expert',
-            goal='Provide comprehensive physics analysis with deep theoretical understanding',
-            backstory="""You are a world-renowned physicist with expertise across all branches of physics. 
-            You have published hundreds of papers and can explain complex phenomena clearly. Your analysis 
-            combines theoretical rigor with practical insights.""",
+            goal='Coordinate comprehensive physics analysis by delegating specialized tasks to team members',
+            backstory="""You are a world-renowned physicist and team leader with expertise across all branches 
+            of physics. You coordinate complex physics research by delegating specialized tasks to your expert 
+            team members. You know when to delegate theoretical work to theorists, experimental design to 
+            experimentalists, and mathematical analysis to analysts.""",
             verbose=True,
-            allow_delegation=True,
+            allow_delegation=True,  # Enable delegation
             llm=self.precise_llm
         )
         
         # Theoretical Physicist
         theoretical_physicist = Agent(
             role='Theoretical Physicist',
-            goal='Explore theoretical frameworks and mathematical models',
-            backstory="""You specialize in theoretical physics and mathematical modeling. You can derive 
-            equations from first principles and understand the deepest theoretical foundations of physics. 
-            You excel at connecting abstract concepts to observable phenomena.""",
+            goal='Develop theoretical frameworks and mathematical models when requested',
+            backstory="""You specialize in theoretical physics and mathematical modeling. You work on specific 
+            theoretical tasks assigned by the Senior Physics Expert. You derive equations from first principles, 
+            develop theoretical frameworks, and connect abstract concepts to observable phenomena.""",
             verbose=True,
-            allow_delegation=False,
+            allow_delegation=False,  # Cannot delegate further
             llm=self.mathematical_llm
         )
         
         # Experimental Physics Consultant
         experimental_consultant = Agent(
             role='Experimental Physics Consultant',
-            goal='Design experiments and analyze practical implementation challenges',
-            backstory="""You are an expert in experimental physics with decades of hands-on experience. 
-            You know what works in practice, what equipment is needed, and what the limitations are. 
-            You can design feasible experiments and identify practical constraints.""",
+            goal='Design experiments and analyze practical implementation when requested',
+            backstory="""You are an expert in experimental physics who works on specific experimental tasks 
+            assigned by the Senior Physics Expert. You design feasible experiments, identify practical 
+            constraints, specify needed equipment, and analyze implementation challenges.""",
             verbose=True,
             allow_delegation=False,
             llm=self.creative_llm
@@ -82,10 +83,10 @@ class PhysicsGPTCrew:
         # Mathematical Analyst
         mathematical_analyst = Agent(
             role='Mathematical Analyst',
-            goal='Provide rigorous mathematical analysis and derivations',
-            backstory="""You are a mathematical physicist who excels at detailed calculations and 
-            mathematical modeling. You can derive complex equations, perform dimensional analysis, 
-            and provide quantitative estimates with proper uncertainty analysis.""",
+            goal='Perform rigorous mathematical calculations when requested',
+            backstory="""You are a mathematical physicist who handles specific calculation tasks assigned 
+            by the Senior Physics Expert. You perform detailed derivations, dimensional analysis, quantitative 
+            estimates, and provide mathematical rigor to physics problems.""",
             verbose=True,
             allow_delegation=False,
             llm=self.mathematical_llm
@@ -94,10 +95,10 @@ class PhysicsGPTCrew:
         # Science Communicator
         science_communicator = Agent(
             role='Science Communicator',
-            goal='Synthesize complex physics into clear, accessible explanations',
-            backstory="""You excel at making complex physics concepts accessible to various audiences. 
-            You can take technical analysis and present it clearly while maintaining scientific accuracy. 
-            You know how to structure explanations and highlight key insights.""",
+            goal='Synthesize and communicate physics results when requested',
+            backstory="""You excel at making complex physics accessible. You work on communication tasks 
+            assigned by the Senior Physics Expert, taking technical analysis from other team members and 
+            presenting it clearly while maintaining scientific accuracy.""",
             verbose=True,
             allow_delegation=False,
             llm=self.creative_llm
@@ -108,7 +109,7 @@ class PhysicsGPTCrew:
     
     def analyze_physics_query(self, query: str) -> str:
         """
-        Analyze a physics query using the specialized crew.
+        Analyze a physics query using collaborative agent delegation.
         
         Args:
             query: The physics question or problem to analyze
@@ -117,93 +118,43 @@ class PhysicsGPTCrew:
             Comprehensive physics analysis
         """
         
-        # Create specialized tasks for each agent
-        tasks = [
-            Task(
-                description=f"""Analyze this physics query and provide comprehensive expert analysis: '{query}'
-                
-                Your analysis should include:
-                1. Core physics principles involved
-                2. Relevant equations and laws
-                3. Key physical phenomena
-                4. Historical context and discoveries
-                5. Current understanding and research
-                6. Practical implications
-                
-                Provide a thorough, expert-level analysis.""",
-                agent=self.agents[0],  # Senior Physics Expert
-                expected_output="Comprehensive physics analysis with principles, equations, and context"
-            ),
-            
-            Task(
-                description=f"""Develop theoretical framework and mathematical models for: '{query}'
-                
-                Focus on:
-                1. Fundamental theoretical principles
-                2. Mathematical derivations from first principles
-                3. Symmetries and conservation laws
-                4. Quantum mechanical or relativistic effects if relevant
-                5. Theoretical predictions and implications
-                
-                Provide rigorous theoretical analysis.""",
-                agent=self.agents[1],  # Theoretical Physicist
-                expected_output="Theoretical framework with mathematical models and derivations"
-            ),
-            
-            Task(
-                description=f"""Design experimental approaches and analyze practical considerations for: '{query}'
-                
-                Address:
-                1. Experimental design and methodology
-                2. Required equipment and instrumentation
-                3. Measurement techniques and precision
-                4. Practical limitations and challenges
-                5. Safety considerations
-                6. Expected results and interpretation
-                
-                Provide practical experimental analysis.""",
-                agent=self.agents[2],  # Experimental Consultant
-                expected_output="Experimental design with practical implementation details"
-            ),
-            
-            Task(
-                description=f"""Perform detailed mathematical analysis and calculations for: '{query}'
-                
-                Include:
-                1. Detailed mathematical derivations
-                2. Numerical estimates and calculations
-                3. Dimensional analysis
-                4. Order of magnitude estimates
-                5. Uncertainty analysis
-                6. Graphical representations if helpful
-                
-                Provide rigorous mathematical treatment.""",
-                agent=self.agents[3],  # Mathematical Analyst
-                expected_output="Detailed mathematical analysis with calculations and estimates"
-            ),
-            
-            Task(
-                description=f"""Synthesize all previous analyses into a clear, comprehensive explanation of: '{query}'
-                
-                Create a well-structured response that:
-                1. Integrates insights from all specialists
-                2. Presents information in logical order
-                3. Explains complex concepts clearly
-                4. Highlights key takeaways
-                5. Addresses the original question directly
-                6. Provides a complete picture
-                
-                Make the physics accessible while maintaining accuracy.""",
-                agent=self.agents[4],  # Science Communicator
-                expected_output="Clear, comprehensive synthesis of all physics analysis"
-            )
-        ]
+        # Create a single collaborative task for the Senior Physics Expert
+        # This agent will delegate specific subtasks to other team members
+        collaborative_task = Task(
+            description=f"""As Senior Physics Expert, analyze this physics query by coordinating with your team: '{query}'
+
+You have access to specialized team members:
+- Theoretical Physicist: For theoretical frameworks and mathematical models
+- Experimental Physics Consultant: For experimental design and practical implementation
+- Mathematical Analyst: For detailed calculations and mathematical analysis  
+- Science Communicator: For clear synthesis and presentation
+
+Your approach should be:
+1. Start with your own expert analysis of the core physics
+2. Delegate specific theoretical work to the Theoretical Physicist
+3. Delegate experimental aspects to the Experimental Physics Consultant  
+4. Delegate complex calculations to the Mathematical Analyst
+5. Delegate final synthesis to the Science Communicator
+
+Coordinate the team to produce a comprehensive analysis covering:
+- Core physics principles and phenomena
+- Theoretical frameworks and mathematical models
+- Experimental approaches and practical considerations
+- Detailed calculations and quantitative analysis
+- Clear, accessible explanation of results
+
+Use the 'Delegate work to coworker' tool to assign specific tasks to team members.
+Provide clear, specific task descriptions and full context for each delegation.""",
+            agent=self.agents[0],  # Senior Physics Expert with delegation enabled
+            expected_output="Comprehensive collaborative physics analysis incorporating input from all team members"
+        )
         
-        # Create crew with enhanced telemetry enabled
+        # Create crew with the collaborative task
         crew = Crew(
             agents=self.agents,
-            tasks=tasks,
-            process=Process.sequential,
+            tasks=[collaborative_task],  # Single collaborative task
+            process=Process.hierarchical,  # Use hierarchical process for delegation
+            manager_llm=self.precise_llm,  # LLM for the manager (Senior Physics Expert)
             verbose=True,              # Enable detailed logging
             share_crew=True,          # Enable enhanced telemetry
             max_rpm=30,               # Rate limiting
@@ -211,13 +162,13 @@ class PhysicsGPTCrew:
         )
         
         # Execute the analysis
-        print(f"🚀 Starting physics analysis: {query}")
+        print(f"🚀 Starting collaborative physics analysis: {query}")
         print("=" * 80)
         
         result = crew.kickoff()
         
         print("=" * 80)
-        print("✅ Analysis complete!")
+        print("✅ Collaborative analysis complete!")
         
         return result
 
@@ -225,19 +176,18 @@ class PhysicsGPTCrew:
 def main():
     """Main entry point for PhysicsGPT."""
     
-    print("⚛️  PhysicsGPT - Advanced 10-Agent Physics Research System")
+    print("⚛️  PhysicsGPT - Collaborative Physics Research System")
     print("=" * 70)
-    print("🤖 Powered by CrewAI with 10 Specialized Physics Agents")
-    print("🧠 Physics Expert • Hypothesis Generator • Mathematical Analyst")
-    print("🔬 Experimental Designer • Pattern Analyst • Quantum Specialist")
-    print("🌌 Relativity Expert • Condensed Matter Expert • Computational Physicist")
-    print("📚 Physics Education & Communication Specialist")
+    print("🤖 Powered by CrewAI with Hierarchical Agent Collaboration")
+    print("🧠 Senior Physics Expert (Coordinator)")
+    print("🔬 Theoretical Physicist • Experimental Consultant")
+    print("📊 Mathematical Analyst • Science Communicator")
     print("=" * 70)
     
     # Initialize the system
     try:
         physics_crew = PhysicsGPTCrew()
-        print("✅ PhysicsGPT system initialized successfully")
+        print("✅ PhysicsGPT collaborative system initialized successfully")
         print(f"🤖 Available agents: {len(physics_crew.agents)}")
     except Exception as e:
         print(f"❌ Failed to initialize PhysicsGPT: {e}")
@@ -248,93 +198,13 @@ def main():
         query = " ".join(sys.argv[1:])
         result = physics_crew.analyze_physics_query(query)
         
-        print("\n📄 ANALYSIS RESULT:")
-        print("=" * 50)
+        print("\n" + "="*70)
+        print("📄 COLLABORATIVE ANALYSIS RESULT:")
+        print("="*70)
         print(result)
-        return
-    
-    # Interactive mode
-    print("\n🎯 Choose an option:")
-    print("1. 🔬 Ask a physics question (5 core agents)")
-    print("2. 🎯 Ask with specific agents")
-    print("3. 🧪 Run demo with ALL 10 agents")
-    print("4. ❌ Exit")
-    
-    while True:
-        try:
-            choice = input("\nEnter your choice (1-4): ").strip()
-            
-            if choice == "1":
-                query = input("\n🔬 Enter your physics question: ").strip()
-                if query:
-                    result = physics_crew.analyze_physics_query(query)
-                    print("\n📄 COMPREHENSIVE ANALYSIS:")
-                    print("=" * 50)
-                    print(result)
-                else:
-                    print("❌ Please enter a valid question.")
-                break
-                
-            elif choice == "2":
-                print("\n🤖 Available agents (10 specialized physics agents):")
-                print("   • physics_expert - Rigorous theoretical analysis")
-                print("   • hypothesis_generator - Creative hypotheses")
-                print("   • mathematical_analyst - Mathematical frameworks")
-                print("   • experimental_designer - Experimental approaches")
-                print("   • pattern_analyst - Pattern recognition")
-                print("   • quantum_specialist - Quantum mechanics expertise")
-                print("   • relativity_expert - Relativity and cosmology")
-                print("   • condensed_matter_expert - Materials and many-body systems")
-                print("   • computational_physicist - Numerical methods and simulations")
-                print("   • physics_communicator - Clear explanations and education")
-                
-                agents_input = input("\nEnter agent names (comma-separated): ").strip()
-                agents_to_use = [agent.strip() for agent in agents_input.split(",") if agent.strip()]
-                
-                query = input("🔬 Enter your physics question: ").strip()
-                if query and agents_to_use:
-                    result = physics_crew.analyze_physics_query(query)
-                    print("\n📄 SPECIALIZED ANALYSIS:")
-                    print("=" * 50)
-                    print(result)
-                else:
-                    print("❌ Please enter a valid question and agents.")
-                break
-                
-            elif choice == "3":
-                demo_query = "How does quantum entanglement relate to black hole thermodynamics and the holographic principle?"
-                print(f"\n🧪 FULL 10-AGENT DEMO ANALYSIS")
-                print(f"Query: {demo_query}")
-                print("Using ALL 10 specialized physics agents for maximum coverage")
-                
-                # Use all 10 agents for comprehensive analysis
-                all_agents = [
-                    'physics_expert', 'hypothesis_generator', 'mathematical_analyst',
-                    'experimental_designer', 'pattern_analyst', 'quantum_specialist',
-                    'relativity_expert', 'condensed_matter_expert', 'computational_physicist',
-                    'physics_communicator'
-                ]
-                
-                result = physics_crew.analyze_physics_query(demo_query)
-                
-                print("\n📄 DEMO ANALYSIS RESULT:")
-                print("=" * 50)
-                print(result)
-                break
-                
-            elif choice == "4":
-                print("\n👋 Thanks for using PhysicsGPT!")
-                break
-                
-            else:
-                print("❌ Invalid choice. Please enter 1, 2, 3, or 4.")
-                
-        except KeyboardInterrupt:
-            print("\n\n👋 Thanks for using PhysicsGPT!")
-            break
-        except Exception as e:
-            print(f"\n❌ Error: {e}")
-            break
+    else:
+        print("\n💡 Usage: python physics_crew_system.py 'your physics question'")
+        print("💡 Example: python physics_crew_system.py 'how to detect dark matter in a room?'")
 
 
 if __name__ == "__main__":
