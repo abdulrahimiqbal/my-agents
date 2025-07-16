@@ -122,8 +122,27 @@ def initialize_session_state():
 
 def update_conversations_callback(conversations):
     """Callback to update conversations in session state."""
-    st.session_state.conversations = conversations
-    st.session_state.last_update = time.time()
+    try:
+        # Convert AgentConversation objects to dictionaries for session state
+        if conversations:
+            converted_conversations = {}
+            for name, conv in conversations.items():
+                if hasattr(conv, 'to_dict'):
+                    # It's an AgentConversation object, convert to dict
+                    converted_conversations[name] = conv.to_dict()
+                else:
+                    # It's already a dict
+                    converted_conversations[name] = conv
+            st.session_state.conversations = converted_conversations
+        else:
+            st.session_state.conversations = {}
+        
+        st.session_state.last_update = time.time()
+        print(f"🔄 Updated conversations: {len(st.session_state.conversations)} active")
+    except Exception as e:
+        print(f"❌ Error in update callback: {e}")
+        st.session_state.conversations = {}
+        st.session_state.last_update = time.time()
 
 def main():
     initialize_session_state()
@@ -314,13 +333,21 @@ def main():
             else:
                 st.info("👋 Start an analysis to see agent conversations in real-time!")
         else:
-            # Sort conversations by start time
-            sorted_conversations = sorted(
-                conversations.values(), 
-                key=lambda x: x.get('start_time', 0)
-            )
+            # Sort conversations by start time - handle both dict and AgentConversation objects
+            try:
+                sorted_conversations = sorted(
+                    conversations.values(), 
+                    key=lambda x: x.get('start_time', 0) if hasattr(x, 'get') else getattr(x, 'start_time', 0)
+                )
+            except Exception as e:
+                st.error(f"Error sorting conversations: {e}")
+                # Fallback: just use the conversations as-is
+                sorted_conversations = list(conversations.values())
             
             for conv_data in sorted_conversations:
+                # Convert AgentConversation object to dict if needed
+                if hasattr(conv_data, 'to_dict'):
+                    conv_data = conv_data.to_dict()
                 display_agent_conversation(conv_data)
 
 def display_agent_conversation(conv_data):
@@ -541,6 +568,9 @@ def test_monitoring_system():
         agent_monitor.add_agent_thought(test_agent, "Test is nearly complete. All systems nominal.")
         agent_monitor.update_agent_progress(test_agent, 100, "Test complete")
         agent_monitor.complete_agent_conversation(test_agent, "✅ Monitoring system test completed successfully! The conversation tracking is working properly.")
+        
+        # Force update the UI
+        print(f"🔄 Test complete, updating UI with {len(agent_monitor.conversations)} conversations")
         
         st.success("✅ Monitoring system test completed successfully!")
         st.info("🔄 Check the Agent Conversations panel to see the test conversation.")
