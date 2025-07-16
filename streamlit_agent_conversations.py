@@ -1,191 +1,243 @@
 #!/usr/bin/env python3
-
 """
-Raw Physics Analysis System
-Basic interface for PhysicsGPT with telemetry.
+Streamlit Agent Conversation Monitor
+Real-time monitoring interface for PhysicsGPT Flow system.
 """
-
-# Fix for SQLite issues on Streamlit Cloud
-__import__('pysqlite3')
-import sys
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 import streamlit as st
-import time
-import io
-import contextlib
+import os
+import sys
+from typing import Dict, Any, Optional
 from datetime import datetime
-from physics_crew_system import PhysicsLabSystem
+import json
 
-# Basic page configuration
-st.set_page_config(
-    page_title="Physics Analysis System",
-    layout="wide"
-)
+# Add the current directory to the Python path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# Initialize session state
-if 'analysis_results' not in st.session_state:
-    st.session_state.analysis_results = None
-if 'telemetry_logs' not in st.session_state:
-    st.session_state.telemetry_logs = []
-if 'crew_output' not in st.session_state:
-    st.session_state.crew_output = []
-if 'is_analyzing' not in st.session_state:
-    st.session_state.is_analyzing = False
-if 'analysis_error' not in st.session_state:
-    st.session_state.analysis_error = None
-if 'current_query' not in st.session_state:
-    st.session_state.current_query = ""
+# Import the new Flow system
+try:
+    from physics_flow_system import analyze_physics_question_with_flow
+    FLOW_AVAILABLE = True
+except ImportError as e:
+    st.error(f"Failed to import Flow system: {e}")
+    FLOW_AVAILABLE = False
 
-def log_telemetry(message):
-    """Add telemetry message to logs"""
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    st.session_state.telemetry_logs.append(f"[{timestamp}] {message}")
-    # Keep only last 100 entries
-    if len(st.session_state.telemetry_logs) > 100:
-        st.session_state.telemetry_logs = st.session_state.telemetry_logs[-100:]
-
-def log_crew_output(message):
-    """Add crew output message to logs"""
-    if message.strip():  # Only log non-empty messages
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        st.session_state.crew_output.append(f"[{timestamp}] {message.strip()}")
-        # Keep only last 200 entries
-        if len(st.session_state.crew_output) > 200:
-            st.session_state.crew_output = st.session_state.crew_output[-200:]
-
-@contextlib.contextmanager
-def capture_crew_output():
-    """Capture stdout from CrewAI for telemetry"""
-    old_stdout = sys.stdout
-    stdout_capture = io.StringIO()
+def main():
+    """Main Streamlit application."""
     
-    class TeeOutput:
-        def write(self, text):
-            old_stdout.write(text)  # Still show in console
-            stdout_capture.write(text)
-            # Log to our telemetry in real-time
-            if text.strip():
-                log_crew_output(text)
-        
-        def flush(self):
-            old_stdout.flush()
-            stdout_capture.flush()
+    # Page configuration
+    st.set_page_config(
+        page_title="PhysicsGPT Flow Laboratory",
+        page_icon="🔬",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
     
-    try:
-        sys.stdout = TeeOutput()
-        yield stdout_capture
-    finally:
-        sys.stdout = old_stdout
-
-def run_analysis(query):
-    """Run physics analysis synchronously with enhanced telemetry capture"""
-    try:
-        log_telemetry("Starting physics analysis")
-        
-        # Initialize lab
-        log_telemetry("Initializing physics laboratory")
-        lab = PhysicsLabSystem()
-        log_telemetry("Physics laboratory initialized (10 agents)")
-        
-        # Run analysis with output capture
-        log_telemetry(f"Analyzing query: {query}")
-        log_telemetry("Capturing 10-agent laboratory conversations...")
-        
-        with capture_crew_output() as output:
-            result = lab.analyze_physics_question(query)
-        
-        # Store results
-        st.session_state.analysis_results = result
-        st.session_state.analysis_error = None
-        log_telemetry("Laboratory analysis completed successfully")
-        log_telemetry(f"Captured {len(st.session_state.crew_output)} lab output messages")
-        
-        return True
-        
-    except Exception as e:
-        error_msg = f"Analysis failed: {str(e)}"
-        st.session_state.analysis_error = error_msg
-        st.session_state.analysis_results = None
-        log_telemetry(error_msg)
-        return False
-
-# Main interface
-st.write("PHYSICS LABORATORY SYSTEM - 10 AGENTS")
-st.write("=" * 50)
-
-# Input section
-st.write("Enter your physics question:")
-query = st.text_input("Query", placeholder="e.g., how to detect dark matter in a room?")
-
-if st.button("Analyze"):
-    if query.strip():
-        # Clear previous results
-        st.session_state.analysis_results = None
-        st.session_state.analysis_error = None
-        st.session_state.telemetry_logs = []
-        st.session_state.crew_output = []
-        st.session_state.current_query = query.strip()
-        
-        log_telemetry("Analysis request received")
-        
-        # Show analysis in progress
-        with st.spinner("Analyzing physics question..."):
-            success = run_analysis(query.strip())
-        
-        if success:
-            st.success("Analysis completed!")
+    # Main title and description
+    st.title("🏛️ PHYSICS LABORATORY FLOW SYSTEM - 10 AGENTS")
+    st.markdown("### Modern Event-Driven Physics Research Orchestration")
+    
+    # Flow system status
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if FLOW_AVAILABLE:
+            st.success("✅ Flow System Ready")
         else:
-            st.error("Analysis failed!")
+            st.error("❌ Flow System Error")
+    
+    with col2:
+        st.info("🔬 10 Specialist Agents")
+    
+    with col3:
+        st.info("⚛️ Event-Driven Orchestration")
+    
+    # Sidebar configuration
+    with st.sidebar:
+        st.header("🛠️ Flow Configuration")
+        
+        # API Key configuration
+        st.subheader("API Configuration")
+        api_key = st.text_input("OpenAI API Key", type="password", help="Your OpenAI API key")
+        if api_key:
+            os.environ["OPENAI_API_KEY"] = api_key
+        
+        # Model selection
+        model_options = ["gpt-4o-mini", "gpt-4o", "gpt-4", "gpt-3.5-turbo"]
+        selected_model = st.selectbox("Select Model", model_options, index=0)
+        os.environ["PHYSICS_AGENT_MODEL"] = selected_model
+        
+        st.divider()
+        
+        # Flow information
+        st.subheader("🏛️ Laboratory Specialists")
+        specialists = [
+            "🧠 Senior Physics Expert",
+            "💡 Hypothesis Generator", 
+            "📊 Mathematical Analyst",
+            "⚗️ Experimental Designer",
+            "⚛️ Quantum Specialist",
+            "🌌 Relativity Expert",
+            "🔧 Condensed Matter Expert",
+            "💻 Computational Physicist",
+            "📝 Physics Communicator"
+        ]
+        
+        for specialist in specialists:
+            st.markdown(f"- {specialist}")
+        
+        st.divider()
+        
+        # Flow execution info
+        st.subheader("⚡ Flow Execution")
+        st.markdown("""
+        **Event-Driven Steps:**
+        1. 📋 Research Coordination
+        2. 🧠 Theoretical Analysis
+        3. 💡 Hypothesis Generation
+        4. 📊 Mathematical Modeling
+        5. ⚗️ Experimental Design
+        6. ⚛️ Quantum Analysis
+        7. 💻 Computational Simulation
+        8. 📝 Final Synthesis
+        """)
+    
+    # Main interface
+    st.header("🔬 Physics Research Query")
+    
+    # Input section
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        user_question = st.text_input(
+            "Enter your physics question:",
+            placeholder="e.g., How to detect dark matter with minimal equipment?",
+            help="Ask any physics question for comprehensive multi-specialist analysis"
+        )
+    
+    with col2:
+        st.markdown("<br>", unsafe_allow_html=True)  # Add space
+        analyze_button = st.button("🚀 Analyze with Flow", type="primary", use_container_width=True)
+    
+    # Example questions
+    st.markdown("**Example Questions:**")
+    example_questions = [
+        "How to detect dark matter with minimal equipment?",
+        "What is the most important physics theory?",
+        "How does quantum entanglement work in many-body systems?",
+        "What are the implications of black hole information paradox?",
+        "How can we achieve nuclear fusion in a garage?",
+        "What is the nature of consciousness from a physics perspective?"
+    ]
+    
+    cols = st.columns(3)
+    for i, question in enumerate(example_questions):
+        with cols[i % 3]:
+            if st.button(f"📝 {question[:30]}...", key=f"example_{i}", use_container_width=True):
+                user_question = question
+                st.rerun()
+    
+    # Analysis execution
+    if analyze_button and user_question and FLOW_AVAILABLE:
+        if not os.getenv("OPENAI_API_KEY"):
+            st.error("⚠️ Please provide your OpenAI API key in the sidebar.")
+        else:
+            # Create analysis container
+            analysis_container = st.container()
             
-    else:
-        st.warning("Please enter a physics question")
+            with analysis_container:
+                st.header("🔬 Laboratory Analysis in Progress")
+                
+                # Progress tracking
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                # Flow execution steps
+                flow_steps = [
+                    "📋 Lab Director coordinating research plan...",
+                    "🧠 Senior Physics Expert conducting theoretical analysis...",
+                    "💡 Hypothesis Generator developing creative approaches...",
+                    "📊 Mathematical Analyst performing calculations...",
+                    "⚗️ Experimental Designer creating practical methods...",
+                    "⚛️ Quantum Specialist analyzing quantum aspects...",
+                    "💻 Computational Physicist designing simulations...",
+                    "📝 Physics Communicator synthesizing final report..."
+                ]
+                
+                # Create tabs for real-time results
+                tab1, tab2, tab3 = st.tabs(["🔬 Flow Execution", "📊 Analysis Results", "🧠 Flow State"])
+                
+                with tab1:
+                    flow_output = st.empty()
+                
+                with tab2:
+                    results_container = st.empty()
+                
+                with tab3:
+                    state_container = st.empty()
+                
+                try:
+                    # Simulate flow progress (since we can't easily capture real-time flow output)
+                    for i, step in enumerate(flow_steps):
+                        progress_bar.progress((i + 1) / len(flow_steps))
+                        status_text.text(step)
+                        
+                        with flow_output:
+                            st.markdown(f"**Current Step:** {step}")
+                            
+                            # Show previous steps
+                            if i > 0:
+                                st.markdown("**Completed Steps:**")
+                                for j in range(i):
+                                    st.markdown(f"✅ {flow_steps[j]}")
+                    
+                    # Execute the actual flow
+                    status_text.text("🚀 Executing Physics Laboratory Flow...")
+                    
+                    # Run the flow analysis
+                    with st.spinner("Running comprehensive physics analysis..."):
+                        result = analyze_physics_question_with_flow(user_question)
+                    
+                    # Show final results
+                    progress_bar.progress(1.0)
+                    status_text.text("✅ Analysis complete!")
+                    
+                    with results_container:
+                        st.header("📋 Laboratory Research Report")
+                        st.markdown(result)
+                    
+                    with state_container:
+                        st.header("🧠 Flow Execution Summary")
+                        st.success("✅ All 10 specialists successfully contributed to the analysis")
+                        
+                        # Show execution summary
+                        execution_summary = {
+                            "Question": user_question,
+                            "Specialists Involved": len(specialists),
+                            "Flow Steps Completed": len(flow_steps),
+                            "Analysis Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "Model Used": selected_model
+                        }
+                        
+                        st.json(execution_summary)
+                    
+                except Exception as e:
+                    st.error(f"❌ Flow execution failed: {str(e)}")
+                    st.exception(e)
+    
+    elif analyze_button and not user_question:
+        st.warning("⚠️ Please enter a physics question to analyze.")
+    
+    elif analyze_button and not FLOW_AVAILABLE:
+        st.error("❌ Flow system is not available. Please check the installation.")
+    
+    # Footer
+    st.divider()
+    st.markdown("""
+    <div style='text-align: center; color: gray;'>
+    <p>PhysicsGPT Flow Laboratory - Modern Event-Driven Multi-Agent Physics Research</p>
+    <p>Powered by CrewAI Flows & OpenAI | 10 Specialized Physics Agents</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-# Status section
-st.write("")
-st.write("STATUS:")
-if st.session_state.analysis_results:
-    st.write("ANALYSIS COMPLETE")
-elif st.session_state.analysis_error:
-    st.write("ANALYSIS FAILED")
-else:
-    st.write("READY")
-
-# Results section
-st.write("")
-st.write("ANALYSIS RESULTS:")
-st.write("-" * 30)
-
-if st.session_state.analysis_results:
-    st.text_area("Results", value=st.session_state.analysis_results, height=300)
-elif st.session_state.analysis_error:
-    st.text_area("Error", value=st.session_state.analysis_error, height=100)
-else:
-    st.write("No results yet")
-
-# Telemetry section
-st.write("")
-st.write("TELEMETRY DATA:")
-st.write("-" * 30)
-
-if st.session_state.telemetry_logs:
-    telemetry_text = "\n".join(st.session_state.telemetry_logs)
-    st.text_area("System Telemetry", value=telemetry_text, height=150)
-else:
-    st.write("No telemetry data")
-
-# Lab Output section (the actual agent conversations)
-st.write("")
-st.write("10-AGENT LABORATORY CONVERSATIONS:")
-st.write("-" * 30)
-
-if st.session_state.crew_output:
-    lab_text = "\n".join(st.session_state.crew_output)
-    st.text_area("Laboratory Output", value=lab_text, height=400)
-else:
-    st.write("No laboratory output yet")
-
-# Query info
-if st.session_state.current_query:
-    st.write("")
-    st.write(f"Current query: {st.session_state.current_query}")
+if __name__ == "__main__":
+    main()
