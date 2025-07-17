@@ -24,6 +24,13 @@ except ImportError:
     import mimetypes
     MAGIC_AVAILABLE = False
 
+# Try to import uproot for ROOT file support
+try:
+    import uproot
+    UPROOT_AVAILABLE = True
+except ImportError:
+    UPROOT_AVAILABLE = False
+
 # Fix SQLite version issue
 try:
     __import__('pysqlite3')
@@ -45,7 +52,7 @@ class DataAgent:
     Advanced data processing agent with secure file handling and physics integration.
     
     Features:
-    - Auto-detection of CSV, TSV, JSON/NDJSON, Parquet, Excel, HDF5
+    - Auto-detection of CSV, TSV, JSON/NDJSON, Parquet, Excel, HDF5, ROOT
     - Sandboxed subprocess loading for security
     - Data validation and quality checks
     - Integration with PhysicsGPT laboratory memory system
@@ -65,7 +72,8 @@ class DataAgent:
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '_load_excel',
         'application/vnd.ms-excel': '_load_excel_old',
         'application/x-hdf': '_load_hdf5',
-        'application/x-parquet': '_load_parquet'
+        'application/x-parquet': '_load_parquet',
+        'application/x-root': '_load_root'
     }
     
     # Forbidden MIME types for security
@@ -138,10 +146,11 @@ class DataAgent:
                         '.jsonl': 'application/x-ndjson',
                         '.ndjson': 'application/x-ndjson',
                         '.parquet': 'application/x-parquet',
-                        '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                        '.xls': 'application/vnd.ms-excel',
-                        '.h5': 'application/x-hdf',
-                        '.hdf5': 'application/x-hdf'
+                                    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            '.xls': 'application/vnd.ms-excel',
+            '.h5': 'application/x-hdf',
+            '.hdf5': 'application/x-hdf',
+            '.root': 'application/x-root'
                     }.get(ext, 'application/octet-stream')
             
             # Security validation
@@ -522,6 +531,101 @@ except Exception as e:
                         return pd.DataFrame(data)
     raise ValueError("No suitable tabular data found in HDF5 file")
             ''',
+            '_load_root': '''
+    import uproot
+    import pandas as pd
+    import numpy as np
+    
+    # Open ROOT file and find readable objects
+    with uproot.open(file_path) as root_file:
+        keys = root_file.keys()
+        
+        if not keys:
+            raise ValueError("No objects found in ROOT file")
+        
+        # Try different ROOT object types in order of preference
+        
+        # 1. First try TTrees (most structured data)
+        tree_keys = [k for k in keys if hasattr(root_file[k], 'classname') and root_file[k].classname == 'TTree']
+        if tree_keys:
+            tree_key = tree_keys[0]
+            tree = root_file[tree_key]
+            branches = tree.keys()
+            if branches:
+                arrays = tree.arrays(library="ak")
+                data_dict = {}
+                for branch in branches:
+                    arr = arrays[branch]
+                    try:
+                        data_dict[branch] = arr.to_numpy(allow_missing=False)
+                    except:
+                        try:
+                            data_dict[branch] = arr.flatten().to_numpy(allow_missing=False)
+                        except:
+                            data_dict[branch] = arr.to_list()
+                return pd.DataFrame(data_dict)
+        
+        # 2. Try TNtuples (simple tabular data)
+        ntuple_keys = [k for k in keys if hasattr(root_file[k], 'classname') and root_file[k].classname == 'TNtuple']
+        if ntuple_keys:
+            ntuple_key = ntuple_keys[0]
+            ntuple = root_file[ntuple_key]
+            # TNtuples are like simple TTrees
+            arrays = ntuple.arrays(library="ak")
+            data_dict = {}
+            for branch in ntuple.keys():
+                arr = arrays[branch]
+                try:
+                    data_dict[branch] = arr.to_numpy(allow_missing=False)
+                except:
+                    data_dict[branch] = arr.to_list()
+            return pd.DataFrame(data_dict)
+        
+        # 3. Try histograms (convert bin contents to data)
+        hist_keys = [k for k in keys if hasattr(root_file[k], 'classname') and 
+                    root_file[k].classname in ['TH1F', 'TH1D', 'TH1I', 'TH2F', 'TH2D', 'TProfile']]
+        if hist_keys:
+            # Use the first histogram
+            hist_key = hist_keys[0]
+            hist = root_file[hist_key]
+            classname = hist.classname
+            
+            if classname in ['TH1F', 'TH1D', 'TH1I']:
+                # 1D histogram
+                values = hist.values()
+                edges = hist.axis().edges()
+                centers = (edges[:-1] + edges[1:]) / 2
+                return pd.DataFrame({
+                    'bin_center': centers,
+                    'bin_content': values
+                })
+            elif classname in ['TH2F', 'TH2D']:
+                # 2D histogram - flatten to points
+                values = hist.values()
+                x_edges = hist.axis(0).edges()
+                y_edges = hist.axis(1).edges()
+                x_centers = (x_edges[:-1] + x_edges[1:]) / 2
+                y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+                
+                # Create meshgrid and flatten
+                X, Y = np.meshgrid(x_centers, y_centers, indexing='ij')
+                return pd.DataFrame({
+                    'x': X.flatten(),
+                    'y': Y.flatten(),
+                    'z': values.flatten()
+                })
+            elif classname == 'TProfile':
+                # Profile histogram
+                values = hist.values()
+                edges = hist.axis().edges()
+                centers = (edges[:-1] + edges[1:]) / 2
+                return pd.DataFrame({
+                    'bin_center': centers,
+                    'profile_value': values
+                })
+        
+        raise ValueError(f"No supported ROOT objects found. Available objects: {keys}")
+            ''',
             '_load_parquet_or_hdf5': '''
     # Try parquet first, then HDF5
     try:
@@ -583,6 +687,115 @@ except Exception as e:
             return pd.read_parquet(file_path, engine='pyarrow')
         except:
             return self._load_hdf5(file_path)
+    
+    def _load_root(self, file_path: str) -> pd.DataFrame:
+        """Load ROOT file using uproot."""
+        if not UPROOT_AVAILABLE:
+            raise DataAgentError("ROOT file support requires uproot package: pip install uproot")
+        
+        import uproot
+        import pandas as pd
+        import numpy as np
+        
+        # Open ROOT file and find readable objects
+        with uproot.open(file_path) as root_file:
+            keys = root_file.keys()
+            
+            if not keys:
+                raise ValueError("No objects found in ROOT file")
+            
+            # Try different ROOT object types in order of preference
+            
+            # 1. First try TTrees (most structured data)
+            tree_keys = [k for k in keys if hasattr(root_file[k], 'classname') and root_file[k].classname == 'TTree']
+            if tree_keys:
+                tree_key = tree_keys[0]
+                tree = root_file[tree_key]
+                branches = tree.keys()
+                if branches:
+                    arrays = tree.arrays(library="ak")
+                    data_dict = {}
+                    for branch in branches:
+                        arr = arrays[branch]
+                        try:
+                            data_dict[branch] = arr.to_numpy(allow_missing=False)
+                        except:
+                            try:
+                                data_dict[branch] = arr.flatten().to_numpy(allow_missing=False)
+                            except:
+                                data_dict[branch] = arr.to_list()
+                    return pd.DataFrame(data_dict)
+            
+            # 2. Try TNtuples (simple tabular data)
+            ntuple_keys = [k for k in keys if hasattr(root_file[k], 'classname') and root_file[k].classname == 'TNtuple']
+            if ntuple_keys:
+                ntuple_key = ntuple_keys[0]
+                ntuple = root_file[ntuple_key]
+                # TNtuples are like simple TTrees
+                arrays = ntuple.arrays(library="ak")
+                data_dict = {}
+                for branch in ntuple.keys():
+                    arr = arrays[branch]
+                    try:
+                        data_dict[branch] = arr.to_numpy(allow_missing=False)
+                    except:
+                        data_dict[branch] = arr.to_list()
+                return pd.DataFrame(data_dict)
+            
+            # 3. Try histograms (convert bin contents to data)
+            hist_keys = [k for k in keys if hasattr(root_file[k], 'classname') and 
+                        root_file[k].classname in ['TH1F', 'TH1D', 'TH1I', 'TH2F', 'TH2D', 'TProfile']]
+            if hist_keys:
+                data_dicts = []
+                for hist_key in hist_keys:
+                    hist = root_file[hist_key]
+                    classname = hist.classname
+                    
+                    if classname in ['TH1F', 'TH1D', 'TH1I']:
+                        # 1D histogram
+                        values = hist.values()
+                        edges = hist.axis().edges()
+                        centers = (edges[:-1] + edges[1:]) / 2
+                        data_dicts.append({
+                            f'{hist_key}_bin_center': centers,
+                            f'{hist_key}_bin_content': values
+                        })
+                    elif classname in ['TH2F', 'TH2D']:
+                        # 2D histogram - flatten to points
+                        values = hist.values()
+                        x_edges = hist.axis(0).edges()
+                        y_edges = hist.axis(1).edges()
+                        x_centers = (x_edges[:-1] + x_edges[1:]) / 2
+                        y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+                        
+                        # Create meshgrid and flatten
+                        X, Y = np.meshgrid(x_centers, y_centers, indexing='ij')
+                        data_dicts.append({
+                            f'{hist_key}_x': X.flatten(),
+                            f'{hist_key}_y': Y.flatten(),
+                            f'{hist_key}_z': values.flatten()
+                        })
+                    elif classname == 'TProfile':
+                        # Profile histogram
+                        values = hist.values()
+                        edges = hist.axis().edges()
+                        centers = (edges[:-1] + edges[1:]) / 2
+                        data_dicts.append({
+                            f'{hist_key}_bin_center': centers,
+                            f'{hist_key}_profile_value': values
+                        })
+                
+                # Combine all histogram data
+                if data_dicts:
+                    # If only one histogram, use it directly
+                    if len(data_dicts) == 1:
+                        return pd.DataFrame(data_dicts[0])
+                    
+                    # If multiple histograms, try to combine them
+                    # For now, just use the first one
+                    return pd.DataFrame(data_dicts[0])
+            
+            raise ValueError(f"No supported ROOT objects found. Available objects: {keys}")
     
     async def _validate_dataframe(self, df: pd.DataFrame, job_id: str):
         """Validate dataframe quality and detect issues."""

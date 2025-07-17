@@ -21,3 +21,4 @@ h5py
 openpyxl
 xlrd
 fastparquet
+uproot

@@ -542,8 +542,8 @@ def display_data_upload_analysis():
     
     uploaded_file = st.file_uploader(
         "Choose a data file",
-        type=['csv', 'tsv', 'json', 'jsonl', 'parquet', 'xlsx', 'xls', 'h5', 'hdf5'],
-        help="Supported formats: CSV, TSV, JSON, NDJSON, Parquet, Excel, HDF5"
+        type=['csv', 'tsv', 'json', 'jsonl', 'parquet', 'xlsx', 'xls', 'h5', 'hdf5', 'root'],
+        help="Supported formats: CSV, TSV, JSON, NDJSON, Parquet, Excel, HDF5, ROOT"
     )
     
     # Metadata input
