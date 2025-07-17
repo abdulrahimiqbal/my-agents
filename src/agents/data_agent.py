@@ -146,12 +146,16 @@ class DataAgent:
                         '.jsonl': 'application/x-ndjson',
                         '.ndjson': 'application/x-ndjson',
                         '.parquet': 'application/x-parquet',
-                                    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            '.xls': 'application/vnd.ms-excel',
-            '.h5': 'application/x-hdf',
-            '.hdf5': 'application/x-hdf',
-            '.root': 'application/x-root'
+                        '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        '.xls': 'application/vnd.ms-excel',
+                        '.h5': 'application/x-hdf',
+                        '.hdf5': 'application/x-hdf',
+                        '.root': 'application/x-root'
                     }.get(ext, 'application/octet-stream')
+            
+            # Special handling for ROOT files that might be detected as octet-stream
+            if mime_type == 'application/octet-stream' and file_path.suffix.lower() == '.root':
+                mime_type = 'application/x-root'
             
             # Security validation
             if mime_type in self._FORBIDDEN_TYPES:
@@ -189,7 +193,28 @@ class DataAgent:
             
             # Load data in sandboxed subprocess
             loader_method = self._LOADERS[mime_type]
-            df = await self._load_file_sandboxed(str(file_path), loader_method)
+            
+            # For ROOT files, try direct loading first if sandboxed fails
+            # ROOT files are generally safe and our main method has better error handling
+            if mime_type == 'application/x-root':
+                try:
+                    df = await self._load_file_sandboxed(str(file_path), loader_method)
+                except DataAgentError as e:
+                    error_msg = str(e).lower()
+                    if ("signature" in error_msg or "subprocess" in error_msg or 
+                        "unable to" in error_msg or "magic" in error_msg or
+                        "same length" in error_msg or "all arrays must" in error_msg):
+                        print(f"Sandboxed ROOT loading failed ({e}), trying direct loading...")
+                        # Fall back to direct loading for ROOT files
+                        df = getattr(self, loader_method)(str(file_path))
+                    else:
+                        raise
+                except Exception as e:
+                    # Catch any other subprocess-related errors
+                    print(f"Sandboxed ROOT loading failed with unexpected error ({e}), trying direct loading...")
+                    df = getattr(self, loader_method)(str(file_path))
+            else:
+                df = await self._load_file_sandboxed(str(file_path), loader_method)
             
             # Validate data quality
             await self._validate_dataframe(df, job_id)
@@ -535,130 +560,173 @@ except Exception as e:
     import uproot
     import pandas as pd
     import numpy as np
+    from pathlib import Path
     
-    # Open ROOT file efficiently using best practices
-    with uproot.open(file_path) as root_file:
-        # Use classnames() to inspect without reading (best practice)
-        classnames = root_file.classnames()
-        
-        if not classnames:
-            raise ValueError("No objects found in ROOT file")
-        
-        # Try different ROOT object types following best practices
-        
-        # 1. TTrees and RNTuples (most structured data)
-        tree_keys = [k for k, cls in classnames.items() 
-                    if cls in ['TTree', 'ROOT::RNTuple']]
-        if tree_keys:
-            tree_key = tree_keys[0]
-            tree = root_file[tree_key]
-            
-            if hasattr(tree, 'keys') and tree.keys():
+    # Validate file exists and basic properties
+    file_path_obj = Path(file_path)
+    if not file_path_obj.exists():
+        raise ValueError(f"ROOT file not found: {file_path}")
+    
+    file_size = file_path_obj.stat().st_size
+    if file_size == 0:
+        raise ValueError("ROOT file is empty")
+    
+    if file_size < 50:
+        raise ValueError("File too small to be a valid ROOT file")
+    
+    try:
+        # Open ROOT file with enhanced error handling
+        with uproot.open(file_path) as root_file:
+            # Use classnames() to inspect without reading (best practice)
+            try:
+                classnames = root_file.classnames()
+            except Exception as e:
+                # If classnames fails, try basic inspection
                 try:
-                    # Try pandas library first for better integration (small sample for subprocess)
-                    max_entries = min(1000, getattr(tree, 'num_entries', 1000))
-                    return tree.arrays(library="pd", entry_stop=max_entries)
-                except:
-                    # Fallback to awkward arrays with simplified handling
-                    arrays = tree.arrays(library="ak", entry_stop=1000)
-                    data_dict = {}
-                    
-                    for branch_name in tree.keys():
-                        arr = arrays[branch_name]
+                    keys = root_file.keys()
+                    if not keys:
+                        raise ValueError("ROOT file contains no readable objects")
+                    classnames = {}
+                    for key in keys:
                         try:
-                            if arr.ndim == 1:
-                                data_dict[branch_name] = arr.to_numpy()
-                            else:
-                                # For nested data, try flattening
-                                try:
-                                    flat_arr = arr.flatten()
-                                    if len(flat_arr) <= len(arr) * 5:  # Reasonable expansion
-                                        data_dict[branch_name] = flat_arr.to_numpy()
-                                    else:
-                                        # Take first element for deeply nested data
-                                        data_dict[branch_name] = arr[:, 0].to_numpy()
-                                except:
-                                    # Convert to string for complex structures
-                                    data_dict[branch_name] = [str(x) for x in arr.to_list()]
+                            obj = root_file[key]
+                            classnames[key] = obj.classname if hasattr(obj, 'classname') else type(obj).__name__
                         except:
-                            # Final fallback
-                            data_dict[branch_name] = arr.to_list()
-                    
-                    return pd.DataFrame(data_dict)
-        
-        # 2. TNtuples (simple tabular data)
-        ntuple_keys = [k for k, cls in classnames.items() if cls == 'TNtuple']
-        if ntuple_keys:
-            ntuple = root_file[ntuple_keys[0]]
-            try:
-                return ntuple.arrays(library="pd")
-            except:
-                arrays = ntuple.arrays(library="ak")
-                data_dict = {branch: arrays[branch].to_numpy() 
-                           for branch in ntuple.keys()}
-                return pd.DataFrame(data_dict)
-        
-        # 3. Histograms (convert bin contents to tabular data)
-        hist_types = ['TH1F', 'TH1D', 'TH1I', 'TH1C', 'TH1S',
-                     'TH2F', 'TH2D', 'TH2I', 'TH2C', 'TH2S',
-                     'TProfile', 'TProfile2D']
-        hist_keys = [k for k, cls in classnames.items() if cls in hist_types]
-        if hist_keys:
-            hist = root_file[hist_keys[0]]
-            classname = classnames[hist_keys[0]]
+                            classnames[key] = 'Unknown'
+                except Exception as inner_e:
+                    raise ValueError(f"ROOT file appears corrupted: {str(e)}")
             
-            try:
-                # Use to_numpy() method when available (best practice)
-                if classname.startswith('TH1') or classname == 'TProfile':
-                    values, edges = hist.to_numpy()
-                    centers = (edges[:-1] + edges[1:]) / 2
-                    return pd.DataFrame({'bin_center': centers, 'bin_content': values})
-                elif classname.startswith('TH2') or classname == 'TProfile2D':
-                    values, x_edges, y_edges = hist.to_numpy()
-                    x_centers = (x_edges[:-1] + x_edges[1:]) / 2
-                    y_centers = (y_edges[:-1] + y_edges[1:]) / 2
-                    X, Y = np.meshgrid(x_centers, y_centers, indexing='ij')
-                    return pd.DataFrame({
-                        'x_center': X.flatten(),
-                        'y_center': Y.flatten(),
-                        'bin_content': values.flatten()
-                    })
-            except:
-                # Fallback to older methods
-                if classname in ['TH1F', 'TH1D', 'TH1I', 'TH1C', 'TH1S']:
-                    values = hist.values()
-                    edges = hist.axis().edges()
-                    centers = (edges[:-1] + edges[1:]) / 2
-                    return pd.DataFrame({'bin_center': centers, 'bin_content': values})
-                elif classname in ['TH2F', 'TH2D', 'TH2I', 'TH2C', 'TH2S']:
-                    values = hist.values()
-                    x_edges = hist.axis(0).edges()
-                    y_edges = hist.axis(1).edges()
-                    x_centers = (x_edges[:-1] + x_edges[1:]) / 2
-                    y_centers = (y_edges[:-1] + y_edges[1:]) / 2
-                    X, Y = np.meshgrid(x_centers, y_centers, indexing='ij')
-                    return pd.DataFrame({
-                        'x_center': X.flatten(),
-                        'y_center': Y.flatten(),
-                        'bin_content': values.flatten()
-                    })
-        
-        # 4. TGraph objects (if present)
-        graph_types = ['TGraph', 'TGraphErrors', 'TGraphAsymmErrors']
-        graph_keys = [k for k, cls in classnames.items() if cls in graph_types]
-        if graph_keys:
-            graph = root_file[graph_keys[0]]
-            try:
-                x_values = graph.values(axis="x")
-                y_values = graph.values(axis="y")
-                return pd.DataFrame({'x': x_values, 'y': y_values})
-            except:
-                # If values() method fails, try alternative approach
-                return pd.DataFrame({'note': ['TGraph data available but could not parse']})
-        
-        # Generate helpful error message
-        available = [f"{k}({cls})" for k, cls in classnames.items()]
-        raise ValueError(f"No supported ROOT objects found. Available: {available}")
+            if not classnames:
+                raise ValueError("No objects found in ROOT file")
+            
+            # Try different ROOT object types following best practices
+            
+            # 1. TTrees and RNTuples (most structured data)
+            tree_keys = [k for k, cls in classnames.items() 
+                        if cls in ['TTree', 'ROOT::RNTuple']]
+            if tree_keys:
+                tree_key = tree_keys[0]
+                try:
+                    tree = root_file[tree_key]
+                except Exception as e:
+                    raise ValueError(f"Failed to access TTree '{tree_key}': {str(e)}")
+                
+                if hasattr(tree, 'keys') and tree.keys():
+                    try:
+                        # For subprocess, limit to 1000 entries for safety
+                        num_entries = getattr(tree, 'num_entries', 1000)
+                        max_entries = min(1000, num_entries)
+                        
+                        if num_entries == 0:
+                            raise ValueError(f"TTree '{tree_key}' is empty")
+                        
+                        # Try pandas library first for better integration
+                        try:
+                            return tree.arrays(library="pd", entry_stop=max_entries)
+                        except Exception as pd_error:
+                            # Fallback to awkward arrays with simplified handling
+                            arrays = tree.arrays(library="ak", entry_stop=max_entries)
+                            data_dict = {}
+                            
+                            for branch_name in tree.keys():
+                                try:
+                                    arr = arrays[branch_name]
+                                    if arr.ndim == 1:
+                                        data_dict[branch_name] = arr.to_numpy()
+                                    else:
+                                        # For nested data, try flattening
+                                        try:
+                                            flat_arr = arr.flatten()
+                                            if len(flat_arr) <= len(arr) * 5:  # Reasonable expansion
+                                                data_dict[branch_name] = flat_arr.to_numpy()
+                                            else:
+                                                # Take first element for deeply nested data
+                                                data_dict[branch_name] = arr[:, 0].to_numpy()
+                                        except:
+                                            # Convert to string for complex structures (limit for subprocess)
+                                            data_dict[branch_name] = [str(x) for x in arr.to_list()[:500]]
+                                except Exception as branch_error:
+                                    # Create placeholder for problematic branches
+                                    data_dict[branch_name] = [f"Error: {str(branch_error)}"] * min(500, max_entries)
+                            
+                            if not data_dict:
+                                raise ValueError("No branches could be processed from TTree")
+                            
+                            return pd.DataFrame(data_dict)
+                    except Exception as tree_error:
+                        raise ValueError(f"Could not read TTree '{tree_key}': {str(tree_error)}")
+            
+            # 2. TNtuples (simple tabular data)
+            ntuple_keys = [k for k, cls in classnames.items() if cls == 'TNtuple']
+            if ntuple_keys:
+                try:
+                    ntuple = root_file[ntuple_keys[0]]
+                    try:
+                        return ntuple.arrays(library="pd")
+                    except:
+                        arrays = ntuple.arrays(library="ak")
+                        data_dict = {branch: arrays[branch].to_numpy() 
+                                   for branch in ntuple.keys()}
+                        return pd.DataFrame(data_dict)
+                except Exception as e:
+                    # Continue to next object type
+                    pass
+            
+            # 3. Histograms (convert bin contents to tabular data)
+            hist_types = ['TH1F', 'TH1D', 'TH1I', 'TH1C', 'TH1S',
+                         'TH2F', 'TH2D', 'TH2I', 'TH2C', 'TH2S',
+                         'TProfile', 'TProfile2D']
+            hist_keys = [k for k, cls in classnames.items() if cls in hist_types]
+            if hist_keys:
+                try:
+                    hist = root_file[hist_keys[0]]
+                    classname = classnames[hist_keys[0]]
+                    
+                    # Use to_numpy() method when available (best practice)
+                    if classname.startswith('TH1') or classname == 'TProfile':
+                        values, edges = hist.to_numpy()
+                        centers = (edges[:-1] + edges[1:]) / 2
+                        return pd.DataFrame({'bin_center': centers, 'bin_content': values})
+                    elif classname.startswith('TH2') or classname == 'TProfile2D':
+                        values, x_edges, y_edges = hist.to_numpy()
+                        x_centers = (x_edges[:-1] + x_edges[1:]) / 2
+                        y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+                        X, Y = np.meshgrid(x_centers, y_centers, indexing='ij')
+                        return pd.DataFrame({
+                            'x_center': X.flatten(),
+                            'y_center': Y.flatten(),
+                            'bin_content': values.flatten()
+                        })
+                except Exception as e:
+                    # Continue to next object type
+                    pass
+            
+            # 4. TGraph objects (if present)
+            graph_types = ['TGraph', 'TGraphErrors', 'TGraphAsymmErrors']
+            graph_keys = [k for k, cls in classnames.items() if cls in graph_types]
+            if graph_keys:
+                try:
+                    graph = root_file[graph_keys[0]]
+                    x_values = graph.values(axis="x")
+                    y_values = graph.values(axis="y")
+                    return pd.DataFrame({'x': x_values, 'y': y_values})
+                except Exception as e:
+                    # Continue to error message
+                    pass
+            
+            # Generate helpful error message
+            available = [f"{k}({cls})" for k, cls in classnames.items()]
+            raise ValueError(f"No supported ROOT objects could be read. Available: {available}")
+            
+    except Exception as e:
+        # Enhanced error message for different types of issues
+        error_msg = str(e).lower()
+        if "signature" in error_msg or "magic" in error_msg:
+            raise ValueError(f"ROOT file appears corrupted or has invalid signature. Original error: {str(e)}")
+        elif "permission" in error_msg or "access" in error_msg:
+            raise ValueError(f"Cannot access ROOT file - check permissions: {str(e)}")
+        else:
+            raise ValueError(f"Failed to read ROOT file: {str(e)}")
             ''',
             '_load_parquet_or_hdf5': '''
     # Try parquet first, then HDF5
@@ -731,207 +799,323 @@ except Exception as e:
         import pandas as pd
         import numpy as np
         
-        # Open ROOT file and inspect contents efficiently
-        with uproot.open(file_path) as root_file:
-            # Use classnames() to inspect objects without reading them (best practice)
-            classnames = root_file.classnames()
-            
-            if not classnames:
-                raise ValueError("No objects found in ROOT file")
-            
-            # Try different ROOT object types in order of preference
-            
-            # 1. First try TTrees and RNTuples (most structured data)
-            tree_keys = [k for k, cls in classnames.items() 
-                        if cls in ['TTree', 'ROOT::RNTuple']]
-            if tree_keys:
-                tree_key = tree_keys[0]
-                tree = root_file[tree_key]
-                
-                # Check if TTree has branches
-                if hasattr(tree, 'keys') and tree.keys():
-                    # For small datasets, try using library="pd" directly for better integration
-                    try:
-                        if hasattr(tree, 'num_entries') and tree.num_entries <= 50000:
-                            # Small file - read directly to pandas
-                            return tree.arrays(library="pd")
-                        else:
-                            # Large file - read first 10000 entries as sample
-                            return tree.arrays(library="pd", entry_stop=10000)
-                    except Exception:
-                        # Fallback to awkward arrays for complex nested data
-                        try:
-                            # Read a reasonable number of entries to avoid memory issues
-                            max_entries = min(25000, getattr(tree, 'num_entries', 10000))
-                            arrays = tree.arrays(library="ak", entry_stop=max_entries)
-                            data_dict = {}
-                            
-                            for branch_name in tree.keys():
-                                arr = arrays[branch_name]
-                                
-                                # Handle different array types using awkward array utilities
-                                try:
-                                    # Check if array is categorical (string-like)
-                                    if hasattr(arr, 'layout') and 'categorical' in str(type(arr.layout)):
-                                        data_dict[branch_name] = arr.to_numpy().astype(str)
-                                    # Check if it's a regular array that can be directly converted
-                                    elif arr.ndim == 1:
-                                        data_dict[branch_name] = arr.to_numpy()
-                                    # Handle jagged/nested arrays
-                                    else:
-                                        # Try to flatten jagged arrays
-                                        try:
-                                            flat_arr = arr.flatten()
-                                            if len(flat_arr) <= len(arr) * 10:  # Reasonable expansion
-                                                data_dict[branch_name] = flat_arr.to_numpy()
-                                            else:
-                                                # Take first element of each entry for very nested data
-                                                data_dict[branch_name] = arr[:, 0].to_numpy()
-                                        except:
-                                            # For very complex structures, convert to string representation
-                                            data_dict[branch_name] = [str(x) for x in arr.to_list()]
-                                            
-                                except Exception as e:
-                                    # Last resort: convert to list
-                                    try:
-                                        data_dict[branch_name] = arr.to_list()
-                                    except:
-                                        # If all else fails, create placeholder
-                                        data_dict[branch_name] = [f"Complex data (branch: {branch_name})"] * len(arrays)
-                            
-                            return pd.DataFrame(data_dict)
-                        except Exception as e:
-                            raise ValueError(f"Could not read TTree '{tree_key}': {str(e)}")
-            
-            # 2. Try TNtuples (simple tabular data)
-            ntuple_keys = [k for k, cls in classnames.items() if cls == 'TNtuple']
-            if ntuple_keys:
-                ntuple_key = ntuple_keys[0]
-                ntuple = root_file[ntuple_key]
-                # TNtuples are simple - try pandas directly first
+        # First, validate that the file exists and is readable
+        file_path_obj = Path(file_path)
+        if not file_path_obj.exists():
+            raise DataAgentError(f"ROOT file not found: {file_path}")
+        
+        # Check file size and basic properties
+        file_size = file_path_obj.stat().st_size
+        if file_size == 0:
+            raise DataAgentError("ROOT file is empty")
+        
+        if file_size < 50:  # ROOT files are typically much larger
+            raise DataAgentError("File too small to be a valid ROOT file")
+        
+        # Try to open ROOT file with enhanced error handling
+        try:
+            with uproot.open(file_path) as root_file:
+                # Use classnames() to inspect objects without reading them (best practice)
                 try:
-                    return ntuple.arrays(library="pd")
-                except Exception:
-                    # Fallback to awkward arrays
-                    arrays = ntuple.arrays(library="ak")
-                    data_dict = {branch: arrays[branch].to_numpy() 
-                               for branch in ntuple.keys()}
-                    return pd.DataFrame(data_dict)
-            
-            # 3. Try histograms (convert bin contents to data)
-            hist_types = ['TH1F', 'TH1D', 'TH1I', 'TH1C', 'TH1S',  # 1D histograms
-                         'TH2F', 'TH2D', 'TH2I', 'TH2C', 'TH2S',  # 2D histograms  
-                         'TH3F', 'TH3D', 'TH3I', 'TH3C', 'TH3S',  # 3D histograms
-                         'TProfile', 'TProfile2D', 'TProfile3D']   # Profile histograms
-            
-            hist_keys = [k for k, cls in classnames.items() if cls in hist_types]
-            if hist_keys:
-                hist_key = hist_keys[0]  # Use first histogram
-                hist = root_file[hist_key]
-                classname = classnames[hist_key]
-                
-                # Use histogram's to_numpy() method when available (best practice)
-                try:
-                    if classname.startswith('TH1') or classname == 'TProfile':
-                        # 1D histogram or profile
-                        values, bin_edges = hist.to_numpy()
-                        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-                        return pd.DataFrame({
-                            'bin_center': bin_centers,
-                            'bin_content': values
-                        })
-                    elif classname.startswith('TH2') or classname == 'TProfile2D':
-                        # 2D histogram or profile
-                        values, x_edges, y_edges = hist.to_numpy()
-                        x_centers = (x_edges[:-1] + x_edges[1:]) / 2
-                        y_centers = (y_edges[:-1] + y_edges[1:]) / 2
-                        
-                        # Create meshgrid and flatten for tabular format
-                        X, Y = np.meshgrid(x_centers, y_centers, indexing='ij')
-                        return pd.DataFrame({
-                            'x_center': X.flatten(),
-                            'y_center': Y.flatten(),
-                            'bin_content': values.flatten()
-                        })
-                    elif classname.startswith('TH3') or classname == 'TProfile3D':
-                        # 3D histogram - flatten to tabular format (limit size for memory)
-                        values, x_edges, y_edges, z_edges = hist.to_numpy()
-                        
-                        # Check if result would be too large
-                        total_bins = len(x_edges) * len(y_edges) * len(z_edges)
-                        if total_bins > 100000:
-                            raise ValueError(f"3D histogram too large ({total_bins} bins)")
-                            
-                        x_centers = (x_edges[:-1] + x_edges[1:]) / 2
-                        y_centers = (y_edges[:-1] + y_edges[1:]) / 2
-                        z_centers = (z_edges[:-1] + z_edges[1:]) / 2
-                        
-                        X, Y, Z = np.meshgrid(x_centers, y_centers, z_centers, indexing='ij')
-                        return pd.DataFrame({
-                            'x_center': X.flatten(),
-                            'y_center': Y.flatten(), 
-                            'z_center': Z.flatten(),
-                            'bin_content': values.flatten()
-                        })
-                except Exception:
-                    # Fallback to older methods for histograms
-                    if classname in ['TH1F', 'TH1D', 'TH1I', 'TH1C', 'TH1S']:
-                        values = hist.values()
-                        edges = hist.axis().edges()
-                        centers = (edges[:-1] + edges[1:]) / 2
-                        return pd.DataFrame({
-                            'bin_center': centers,
-                            'bin_content': values
-                        })
-                    elif classname in ['TH2F', 'TH2D', 'TH2I', 'TH2C', 'TH2S']:
-                        values = hist.values()
-                        x_edges = hist.axis(0).edges()
-                        y_edges = hist.axis(1).edges()
-                        x_centers = (x_edges[:-1] + x_edges[1:]) / 2
-                        y_centers = (y_edges[:-1] + y_edges[1:]) / 2
-                        
-                        X, Y = np.meshgrid(x_centers, y_centers, indexing='ij')
-                        return pd.DataFrame({
-                            'x_center': X.flatten(),
-                            'y_center': Y.flatten(),
-                            'bin_content': values.flatten()
-                        })
-            
-            # 4. Try TGraph objects (if present)
-            graph_types = ['TGraph', 'TGraphErrors', 'TGraphAsymmErrors']
-            graph_keys = [k for k, cls in classnames.items() if cls in graph_types]
-            if graph_keys:
-                graph_key = graph_keys[0]
-                graph = root_file[graph_key]
-                
-                # Extract graph data
-                try:
-                    x_values = graph.values(axis="x")
-                    y_values = graph.values(axis="y")
-                    data = {'x': x_values, 'y': y_values}
-                    
-                    # Add errors if available
-                    if classnames[graph_key] in ['TGraphErrors', 'TGraphAsymmErrors']:
-                        try:
-                            x_errors = graph.errors(axis="x")
-                            y_errors = graph.errors(axis="y")
-                            if x_errors is not None:
-                                data['x_error'] = x_errors
-                            if y_errors is not None:
-                                data['y_error'] = y_errors
-                        except:
-                            pass  # Errors not available
-                            
-                    return pd.DataFrame(data)
+                    classnames = root_file.classnames()
                 except Exception as e:
-                    raise ValueError(f"Could not read TGraph '{graph_key}': {str(e)}")
-            
-            # Generate helpful error message
-            available_objects = []
-            for k, cls in classnames.items():
-                available_objects.append(f"{k} ({cls})")
-            
-            raise ValueError(f"No supported ROOT objects found. Available objects: {', '.join(available_objects)}")
+                    # If classnames fails, try basic inspection
+                    try:
+                        keys = root_file.keys()
+                        if not keys:
+                            raise DataAgentError("ROOT file contains no readable objects")
+                        # Create basic classnames dict
+                        classnames = {}
+                        for key in keys:
+                            try:
+                                obj = root_file[key]
+                                classnames[key] = obj.classname if hasattr(obj, 'classname') else type(obj).__name__
+                            except:
+                                classnames[key] = 'Unknown'
+                    except Exception as inner_e:
+                        raise DataAgentError(f"ROOT file appears corrupted or uses unsupported format. Original error: {str(e)}, Inspection error: {str(inner_e)}")
+                
+                if not classnames:
+                    raise DataAgentError("No objects found in ROOT file")
+                
+                # Log file structure for debugging
+                print(f"ROOT file structure: {classnames}")
+                
+                # Try different ROOT object types in order of preference
+                
+                # 1. First try TTrees and RNTuples (most structured data)
+                tree_keys = [k for k, cls in classnames.items() 
+                            if cls in ['TTree', 'ROOT::RNTuple']]
+                if tree_keys:
+                    tree_key = tree_keys[0]
+                    print(f"Loading TTree: {tree_key}")
+                    
+                    try:
+                        tree = root_file[tree_key]
+                    except Exception as e:
+                        raise DataAgentError(f"Failed to access TTree '{tree_key}': {str(e)}")
+                    
+                    # Check if TTree has branches
+                    if hasattr(tree, 'keys') and tree.keys():
+                        # For small datasets, try using library="pd" directly for better integration
+                        try:
+                            num_entries = getattr(tree, 'num_entries', 0)
+                            print(f"TTree has {num_entries} entries")
+                            
+                            if num_entries == 0:
+                                raise DataAgentError(f"TTree '{tree_key}' is empty")
+                            
+                            # Choose appropriate reading strategy based on size
+                            if num_entries <= 50000:
+                                # Small file - read directly to pandas
+                                try:
+                                    return tree.arrays(library="pd")
+                                except Exception as pd_error:
+                                    print(f"Direct pandas conversion failed: {pd_error}, trying awkward arrays...")
+                                    # Fallback to awkward arrays
+                                    pass
+                            else:
+                                # Large file - read first 10000 entries as sample
+                                try:
+                                    print(f"Large file ({num_entries} entries), reading first 10000...")
+                                    return tree.arrays(library="pd", entry_stop=10000)
+                                except Exception as pd_error:
+                                    print(f"Direct pandas conversion failed: {pd_error}, trying awkward arrays...")
+                                    # Fallback to awkward arrays
+                                    pass
+                                    
+                            # Fallback to awkward arrays for complex nested data
+                            try:
+                                # Read a reasonable number of entries to avoid memory issues
+                                max_entries = min(25000, num_entries)
+                                print(f"Reading {max_entries} entries using awkward arrays...")
+                                arrays = tree.arrays(library="ak", entry_stop=max_entries)
+                                data_dict = {}
+                                
+                                branch_keys = tree.keys()
+                                print(f"Processing {len(branch_keys)} branches...")
+                                
+                                # First pass: determine the expected length
+                                expected_length = max_entries
+                                
+                                for branch_name in branch_keys:
+                                    try:
+                                        arr = arrays[branch_name]
+                                        
+                                        # Handle different array types using awkward array utilities
+                                        # Check if array is categorical (string-like)
+                                        if hasattr(arr, 'layout') and 'categorical' in str(type(arr.layout)):
+                                            processed_data = arr.to_numpy().astype(str)
+                                        # Check if it's a regular array that can be directly converted
+                                        elif arr.ndim == 1:
+                                            processed_data = arr.to_numpy()
+                                        # Handle jagged/nested arrays
+                                        else:
+                                            # Try to flatten jagged arrays
+                                            try:
+                                                flat_arr = arr.flatten()
+                                                if len(flat_arr) <= len(arr) * 10:  # Reasonable expansion
+                                                    processed_data = flat_arr.to_numpy()
+                                                else:
+                                                    # Take first element of each entry for very nested data
+                                                    processed_data = arr[:, 0].to_numpy()
+                                            except:
+                                                # For very complex structures, convert to string representation
+                                                arr_list = arr.to_list()[:1000]  # Limit for memory
+                                                processed_data = [str(x) for x in arr_list]
+                                        
+                                        # Ensure all arrays have the same length
+                                        if len(processed_data) != expected_length:
+                                            if len(processed_data) > expected_length:
+                                                # Truncate if too long
+                                                processed_data = processed_data[:expected_length]
+                                            else:
+                                                # Pad if too short (for jagged arrays)
+                                                if isinstance(processed_data, list):
+                                                    processed_data.extend([None] * (expected_length - len(processed_data)))
+                                                else:
+                                                    import numpy as np
+                                                    if processed_data.dtype.kind in 'iuf':  # numeric
+                                                        pad_value = np.nan
+                                                    else:  # string or object
+                                                        pad_value = None
+                                                    padding = np.full(expected_length - len(processed_data), pad_value, dtype=processed_data.dtype)
+                                                    processed_data = np.concatenate([processed_data, padding])
+                                        
+                                        data_dict[branch_name] = processed_data
+                                                
+                                    except Exception as branch_error:
+                                        print(f"Warning: Could not process branch '{branch_name}': {branch_error}")
+                                        # Create placeholder for problematic branches with correct length
+                                        placeholder = [f"Error: {str(branch_error)}"] * expected_length
+                                        data_dict[branch_name] = placeholder
+                                
+                                if not data_dict:
+                                    raise DataAgentError("No branches could be successfully processed from TTree")
+                                
+                                # Final validation: ensure all arrays have the same length
+                                lengths = {k: len(v) for k, v in data_dict.items()}
+                                unique_lengths = set(lengths.values())
+                                if len(unique_lengths) > 1:
+                                    print(f"Warning: Found different array lengths: {lengths}")
+                                    # Fix any remaining length mismatches
+                                    target_length = max(unique_lengths)
+                                    for key, value in data_dict.items():
+                                        if len(value) < target_length:
+                                            if isinstance(value, list):
+                                                value.extend([None] * (target_length - len(value)))
+                                            else:
+                                                import numpy as np
+                                                if value.dtype.kind in 'iuf':  # numeric
+                                                    pad_value = np.nan
+                                                else:  # string or object
+                                                    pad_value = None
+                                                padding = np.full(target_length - len(value), pad_value, dtype=value.dtype)
+                                                data_dict[key] = np.concatenate([value, padding])
+                                        elif len(value) > target_length:
+                                            data_dict[key] = value[:target_length]
+                                
+                                return pd.DataFrame(data_dict)
+                                
+                            except Exception as ak_error:
+                                raise DataAgentError(f"Could not read TTree '{tree_key}' with awkward arrays: {str(ak_error)}")
+                        
+                        except Exception as tree_read_error:
+                            raise DataAgentError(f"Failed to read TTree data: {str(tree_read_error)}")
+                    else:
+                        print(f"TTree '{tree_key}' has no branches or keys")
+                
+                # 2. Try TNtuples (simple tabular data)
+                ntuple_keys = [k for k, cls in classnames.items() if cls == 'TNtuple']
+                if ntuple_keys:
+                    ntuple_key = ntuple_keys[0]
+                    print(f"Loading TNtuple: {ntuple_key}")
+                    
+                    try:
+                        ntuple = root_file[ntuple_key]
+                        # TNtuples are simple - try pandas directly first
+                        try:
+                            return ntuple.arrays(library="pd")
+                        except Exception:
+                            # Fallback to awkward arrays
+                            arrays = ntuple.arrays(library="ak")
+                            data_dict = {branch: arrays[branch].to_numpy() 
+                                       for branch in ntuple.keys()}
+                            return pd.DataFrame(data_dict)
+                    except Exception as e:
+                        print(f"Failed to read TNtuple '{ntuple_key}': {e}")
+                
+                # 3. Try histograms (convert bin contents to data)
+                hist_types = ['TH1F', 'TH1D', 'TH1I', 'TH1C', 'TH1S',  # 1D histograms
+                             'TH2F', 'TH2D', 'TH2I', 'TH2C', 'TH2S',  # 2D histograms  
+                             'TH3F', 'TH3D', 'TH3I', 'TH3C', 'TH3S',  # 3D histograms
+                             'TProfile', 'TProfile2D', 'TProfile3D']   # Profile histograms
+                
+                hist_keys = [k for k, cls in classnames.items() if cls in hist_types]
+                if hist_keys:
+                    hist_key = hist_keys[0]  # Use first histogram
+                    print(f"Loading histogram: {hist_key}")
+                    
+                    try:
+                        hist = root_file[hist_key]
+                        classname = classnames[hist_key]
+                        
+                        # Use histogram's to_numpy() method when available (best practice)
+                        if classname.startswith('TH1') or classname == 'TProfile':
+                            # 1D histogram or profile
+                            values, bin_edges = hist.to_numpy()
+                            bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+                            return pd.DataFrame({
+                                'bin_center': bin_centers,
+                                'bin_content': values
+                            })
+                        elif classname.startswith('TH2') or classname == 'TProfile2D':
+                            # 2D histogram or profile
+                            values, x_edges, y_edges = hist.to_numpy()
+                            x_centers = (x_edges[:-1] + x_edges[1:]) / 2
+                            y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+                            
+                            # Create meshgrid and flatten for tabular format
+                            X, Y = np.meshgrid(x_centers, y_centers, indexing='ij')
+                            return pd.DataFrame({
+                                'x_center': X.flatten(),
+                                'y_center': Y.flatten(),
+                                'bin_content': values.flatten()
+                            })
+                        elif classname.startswith('TH3') or classname == 'TProfile3D':
+                            # 3D histogram - flatten to tabular format (limit size for memory)
+                            values, x_edges, y_edges, z_edges = hist.to_numpy()
+                            
+                            # Check if result would be too large
+                            total_bins = len(x_edges) * len(y_edges) * len(z_edges)
+                            if total_bins > 100000:
+                                raise DataAgentError(f"3D histogram too large ({total_bins} bins)")
+                                
+                            x_centers = (x_edges[:-1] + x_edges[1:]) / 2
+                            y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+                            z_centers = (z_edges[:-1] + z_edges[1:]) / 2
+                            
+                            X, Y, Z = np.meshgrid(x_centers, y_centers, z_centers, indexing='ij')
+                            return pd.DataFrame({
+                                'x_center': X.flatten(),
+                                'y_center': Y.flatten(), 
+                                'z_center': Z.flatten(),
+                                'bin_content': values.flatten()
+                            })
+                    except Exception as e:
+                        print(f"Failed to read histogram '{hist_key}': {e}")
+                
+                # 4. Try TGraph objects (if present)
+                graph_types = ['TGraph', 'TGraphErrors', 'TGraphAsymmErrors']
+                graph_keys = [k for k, cls in classnames.items() if cls in graph_types]
+                if graph_keys:
+                    graph_key = graph_keys[0]
+                    print(f"Loading TGraph: {graph_key}")
+                    
+                    try:
+                        graph = root_file[graph_key]
+                        
+                        # Extract graph data
+                        x_values = graph.values(axis="x")
+                        y_values = graph.values(axis="y")
+                        data = {'x': x_values, 'y': y_values}
+                        
+                        # Add errors if available
+                        if classnames[graph_key] in ['TGraphErrors', 'TGraphAsymmErrors']:
+                            try:
+                                x_errors = graph.errors(axis="x")
+                                y_errors = graph.errors(axis="y")
+                                if x_errors is not None:
+                                    data['x_error'] = x_errors
+                                if y_errors is not None:
+                                    data['y_error'] = y_errors
+                            except:
+                                pass  # Errors not available
+                                
+                        return pd.DataFrame(data)
+                    except Exception as e:
+                        print(f"Failed to read TGraph '{graph_key}': {e}")
+                
+                # Generate helpful error message with available objects
+                available_objects = []
+                for k, cls in classnames.items():
+                    available_objects.append(f"{k} ({cls})")
+                
+                raise DataAgentError(f"No supported ROOT objects could be read. Available objects: {', '.join(available_objects)}")
+                
+        except uproot.exceptions.KeyInFileError as e:
+            raise DataAgentError(f"ROOT file structure error: {str(e)}")
+        except Exception as e:
+            # Enhanced error message for different types of issues
+            error_msg = str(e).lower()
+            if "signature" in error_msg or "magic" in error_msg:
+                raise DataAgentError(f"ROOT file appears corrupted or has invalid file signature. This could be due to: 1) Incomplete file download, 2) File corruption during transfer, 3) Non-ROOT file with .root extension. Original error: {str(e)}")
+            elif "permission" in error_msg or "access" in error_msg:
+                raise DataAgentError(f"Cannot access ROOT file - check file permissions: {str(e)}")
+            elif "memory" in error_msg or "allocation" in error_msg:
+                raise DataAgentError(f"ROOT file too large or complex for available memory: {str(e)}")
+            else:
+                raise DataAgentError(f"Failed to read ROOT file: {str(e)}")
     
     async def _validate_dataframe(self, df: pd.DataFrame, job_id: str):
         """Validate dataframe quality and detect issues."""
