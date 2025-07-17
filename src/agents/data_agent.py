@@ -536,95 +536,129 @@ except Exception as e:
     import pandas as pd
     import numpy as np
     
-    # Open ROOT file and find readable objects
+    # Open ROOT file efficiently using best practices
     with uproot.open(file_path) as root_file:
-        keys = root_file.keys()
+        # Use classnames() to inspect without reading (best practice)
+        classnames = root_file.classnames()
         
-        if not keys:
+        if not classnames:
             raise ValueError("No objects found in ROOT file")
         
-        # Try different ROOT object types in order of preference
+        # Try different ROOT object types following best practices
         
-        # 1. First try TTrees (most structured data)
-        tree_keys = [k for k in keys if hasattr(root_file[k], 'classname') and root_file[k].classname == 'TTree']
+        # 1. TTrees and RNTuples (most structured data)
+        tree_keys = [k for k, cls in classnames.items() 
+                    if cls in ['TTree', 'ROOT::RNTuple']]
         if tree_keys:
             tree_key = tree_keys[0]
             tree = root_file[tree_key]
-            branches = tree.keys()
-            if branches:
-                arrays = tree.arrays(library="ak")
-                data_dict = {}
-                for branch in branches:
-                    arr = arrays[branch]
-                    try:
-                        data_dict[branch] = arr.to_numpy(allow_missing=False)
-                    except:
+            
+            if hasattr(tree, 'keys') and tree.keys():
+                try:
+                    # Try pandas library first for better integration (small sample for subprocess)
+                    max_entries = min(1000, getattr(tree, 'num_entries', 1000))
+                    return tree.arrays(library="pd", entry_stop=max_entries)
+                except:
+                    # Fallback to awkward arrays with simplified handling
+                    arrays = tree.arrays(library="ak", entry_stop=1000)
+                    data_dict = {}
+                    
+                    for branch_name in tree.keys():
+                        arr = arrays[branch_name]
                         try:
-                            data_dict[branch] = arr.flatten().to_numpy(allow_missing=False)
+                            if arr.ndim == 1:
+                                data_dict[branch_name] = arr.to_numpy()
+                            else:
+                                # For nested data, try flattening
+                                try:
+                                    flat_arr = arr.flatten()
+                                    if len(flat_arr) <= len(arr) * 5:  # Reasonable expansion
+                                        data_dict[branch_name] = flat_arr.to_numpy()
+                                    else:
+                                        # Take first element for deeply nested data
+                                        data_dict[branch_name] = arr[:, 0].to_numpy()
+                                except:
+                                    # Convert to string for complex structures
+                                    data_dict[branch_name] = [str(x) for x in arr.to_list()]
                         except:
-                            data_dict[branch] = arr.to_list()
+                            # Final fallback
+                            data_dict[branch_name] = arr.to_list()
+                    
+                    return pd.DataFrame(data_dict)
+        
+        # 2. TNtuples (simple tabular data)
+        ntuple_keys = [k for k, cls in classnames.items() if cls == 'TNtuple']
+        if ntuple_keys:
+            ntuple = root_file[ntuple_keys[0]]
+            try:
+                return ntuple.arrays(library="pd")
+            except:
+                arrays = ntuple.arrays(library="ak")
+                data_dict = {branch: arrays[branch].to_numpy() 
+                           for branch in ntuple.keys()}
                 return pd.DataFrame(data_dict)
         
-        # 2. Try TNtuples (simple tabular data)
-        ntuple_keys = [k for k in keys if hasattr(root_file[k], 'classname') and root_file[k].classname == 'TNtuple']
-        if ntuple_keys:
-            ntuple_key = ntuple_keys[0]
-            ntuple = root_file[ntuple_key]
-            # TNtuples are like simple TTrees
-            arrays = ntuple.arrays(library="ak")
-            data_dict = {}
-            for branch in ntuple.keys():
-                arr = arrays[branch]
-                try:
-                    data_dict[branch] = arr.to_numpy(allow_missing=False)
-                except:
-                    data_dict[branch] = arr.to_list()
-            return pd.DataFrame(data_dict)
-        
-        # 3. Try histograms (convert bin contents to data)
-        hist_keys = [k for k in keys if hasattr(root_file[k], 'classname') and 
-                    root_file[k].classname in ['TH1F', 'TH1D', 'TH1I', 'TH2F', 'TH2D', 'TProfile']]
+        # 3. Histograms (convert bin contents to tabular data)
+        hist_types = ['TH1F', 'TH1D', 'TH1I', 'TH1C', 'TH1S',
+                     'TH2F', 'TH2D', 'TH2I', 'TH2C', 'TH2S',
+                     'TProfile', 'TProfile2D']
+        hist_keys = [k for k, cls in classnames.items() if cls in hist_types]
         if hist_keys:
-            # Use the first histogram
-            hist_key = hist_keys[0]
-            hist = root_file[hist_key]
-            classname = hist.classname
+            hist = root_file[hist_keys[0]]
+            classname = classnames[hist_keys[0]]
             
-            if classname in ['TH1F', 'TH1D', 'TH1I']:
-                # 1D histogram
-                values = hist.values()
-                edges = hist.axis().edges()
-                centers = (edges[:-1] + edges[1:]) / 2
-                return pd.DataFrame({
-                    'bin_center': centers,
-                    'bin_content': values
-                })
-            elif classname in ['TH2F', 'TH2D']:
-                # 2D histogram - flatten to points
-                values = hist.values()
-                x_edges = hist.axis(0).edges()
-                y_edges = hist.axis(1).edges()
-                x_centers = (x_edges[:-1] + x_edges[1:]) / 2
-                y_centers = (y_edges[:-1] + y_edges[1:]) / 2
-                
-                # Create meshgrid and flatten
-                X, Y = np.meshgrid(x_centers, y_centers, indexing='ij')
-                return pd.DataFrame({
-                    'x': X.flatten(),
-                    'y': Y.flatten(),
-                    'z': values.flatten()
-                })
-            elif classname == 'TProfile':
-                # Profile histogram
-                values = hist.values()
-                edges = hist.axis().edges()
-                centers = (edges[:-1] + edges[1:]) / 2
-                return pd.DataFrame({
-                    'bin_center': centers,
-                    'profile_value': values
-                })
+            try:
+                # Use to_numpy() method when available (best practice)
+                if classname.startswith('TH1') or classname == 'TProfile':
+                    values, edges = hist.to_numpy()
+                    centers = (edges[:-1] + edges[1:]) / 2
+                    return pd.DataFrame({'bin_center': centers, 'bin_content': values})
+                elif classname.startswith('TH2') or classname == 'TProfile2D':
+                    values, x_edges, y_edges = hist.to_numpy()
+                    x_centers = (x_edges[:-1] + x_edges[1:]) / 2
+                    y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+                    X, Y = np.meshgrid(x_centers, y_centers, indexing='ij')
+                    return pd.DataFrame({
+                        'x_center': X.flatten(),
+                        'y_center': Y.flatten(),
+                        'bin_content': values.flatten()
+                    })
+            except:
+                # Fallback to older methods
+                if classname in ['TH1F', 'TH1D', 'TH1I', 'TH1C', 'TH1S']:
+                    values = hist.values()
+                    edges = hist.axis().edges()
+                    centers = (edges[:-1] + edges[1:]) / 2
+                    return pd.DataFrame({'bin_center': centers, 'bin_content': values})
+                elif classname in ['TH2F', 'TH2D', 'TH2I', 'TH2C', 'TH2S']:
+                    values = hist.values()
+                    x_edges = hist.axis(0).edges()
+                    y_edges = hist.axis(1).edges()
+                    x_centers = (x_edges[:-1] + x_edges[1:]) / 2
+                    y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+                    X, Y = np.meshgrid(x_centers, y_centers, indexing='ij')
+                    return pd.DataFrame({
+                        'x_center': X.flatten(),
+                        'y_center': Y.flatten(),
+                        'bin_content': values.flatten()
+                    })
         
-        raise ValueError(f"No supported ROOT objects found. Available objects: {keys}")
+        # 4. TGraph objects (if present)
+        graph_types = ['TGraph', 'TGraphErrors', 'TGraphAsymmErrors']
+        graph_keys = [k for k, cls in classnames.items() if cls in graph_types]
+        if graph_keys:
+            graph = root_file[graph_keys[0]]
+            try:
+                x_values = graph.values(axis="x")
+                y_values = graph.values(axis="y")
+                return pd.DataFrame({'x': x_values, 'y': y_values})
+            except:
+                # If values() method fails, try alternative approach
+                return pd.DataFrame({'note': ['TGraph data available but could not parse']})
+        
+        # Generate helpful error message
+        available = [f"{k}({cls})" for k, cls in classnames.items()]
+        raise ValueError(f"No supported ROOT objects found. Available: {available}")
             ''',
             '_load_parquet_or_hdf5': '''
     # Try parquet first, then HDF5
@@ -689,7 +723,7 @@ except Exception as e:
             return self._load_hdf5(file_path)
     
     def _load_root(self, file_path: str) -> pd.DataFrame:
-        """Load ROOT file using uproot."""
+        """Load ROOT file using uproot following current best practices."""
         if not UPROOT_AVAILABLE:
             raise DataAgentError("ROOT file support requires uproot package: pip install uproot")
         
@@ -697,105 +731,207 @@ except Exception as e:
         import pandas as pd
         import numpy as np
         
-        # Open ROOT file and find readable objects
+        # Open ROOT file and inspect contents efficiently
         with uproot.open(file_path) as root_file:
-            keys = root_file.keys()
+            # Use classnames() to inspect objects without reading them (best practice)
+            classnames = root_file.classnames()
             
-            if not keys:
+            if not classnames:
                 raise ValueError("No objects found in ROOT file")
             
             # Try different ROOT object types in order of preference
             
-            # 1. First try TTrees (most structured data)
-            tree_keys = [k for k in keys if hasattr(root_file[k], 'classname') and root_file[k].classname == 'TTree']
+            # 1. First try TTrees and RNTuples (most structured data)
+            tree_keys = [k for k, cls in classnames.items() 
+                        if cls in ['TTree', 'ROOT::RNTuple']]
             if tree_keys:
                 tree_key = tree_keys[0]
                 tree = root_file[tree_key]
-                branches = tree.keys()
-                if branches:
-                    arrays = tree.arrays(library="ak")
-                    data_dict = {}
-                    for branch in branches:
-                        arr = arrays[branch]
+                
+                # Check if TTree has branches
+                if hasattr(tree, 'keys') and tree.keys():
+                    # For small datasets, try using library="pd" directly for better integration
+                    try:
+                        if hasattr(tree, 'num_entries') and tree.num_entries <= 50000:
+                            # Small file - read directly to pandas
+                            return tree.arrays(library="pd")
+                        else:
+                            # Large file - read first 10000 entries as sample
+                            return tree.arrays(library="pd", entry_stop=10000)
+                    except Exception:
+                        # Fallback to awkward arrays for complex nested data
                         try:
-                            data_dict[branch] = arr.to_numpy(allow_missing=False)
-                        except:
-                            try:
-                                data_dict[branch] = arr.flatten().to_numpy(allow_missing=False)
-                            except:
-                                data_dict[branch] = arr.to_list()
-                    return pd.DataFrame(data_dict)
+                            # Read a reasonable number of entries to avoid memory issues
+                            max_entries = min(25000, getattr(tree, 'num_entries', 10000))
+                            arrays = tree.arrays(library="ak", entry_stop=max_entries)
+                            data_dict = {}
+                            
+                            for branch_name in tree.keys():
+                                arr = arrays[branch_name]
+                                
+                                # Handle different array types using awkward array utilities
+                                try:
+                                    # Check if array is categorical (string-like)
+                                    if hasattr(arr, 'layout') and 'categorical' in str(type(arr.layout)):
+                                        data_dict[branch_name] = arr.to_numpy().astype(str)
+                                    # Check if it's a regular array that can be directly converted
+                                    elif arr.ndim == 1:
+                                        data_dict[branch_name] = arr.to_numpy()
+                                    # Handle jagged/nested arrays
+                                    else:
+                                        # Try to flatten jagged arrays
+                                        try:
+                                            flat_arr = arr.flatten()
+                                            if len(flat_arr) <= len(arr) * 10:  # Reasonable expansion
+                                                data_dict[branch_name] = flat_arr.to_numpy()
+                                            else:
+                                                # Take first element of each entry for very nested data
+                                                data_dict[branch_name] = arr[:, 0].to_numpy()
+                                        except:
+                                            # For very complex structures, convert to string representation
+                                            data_dict[branch_name] = [str(x) for x in arr.to_list()]
+                                            
+                                except Exception as e:
+                                    # Last resort: convert to list
+                                    try:
+                                        data_dict[branch_name] = arr.to_list()
+                                    except:
+                                        # If all else fails, create placeholder
+                                        data_dict[branch_name] = [f"Complex data (branch: {branch_name})"] * len(arrays)
+                            
+                            return pd.DataFrame(data_dict)
+                        except Exception as e:
+                            raise ValueError(f"Could not read TTree '{tree_key}': {str(e)}")
             
             # 2. Try TNtuples (simple tabular data)
-            ntuple_keys = [k for k in keys if hasattr(root_file[k], 'classname') and root_file[k].classname == 'TNtuple']
+            ntuple_keys = [k for k, cls in classnames.items() if cls == 'TNtuple']
             if ntuple_keys:
                 ntuple_key = ntuple_keys[0]
                 ntuple = root_file[ntuple_key]
-                # TNtuples are like simple TTrees
-                arrays = ntuple.arrays(library="ak")
-                data_dict = {}
-                for branch in ntuple.keys():
-                    arr = arrays[branch]
-                    try:
-                        data_dict[branch] = arr.to_numpy(allow_missing=False)
-                    except:
-                        data_dict[branch] = arr.to_list()
-                return pd.DataFrame(data_dict)
+                # TNtuples are simple - try pandas directly first
+                try:
+                    return ntuple.arrays(library="pd")
+                except Exception:
+                    # Fallback to awkward arrays
+                    arrays = ntuple.arrays(library="ak")
+                    data_dict = {branch: arrays[branch].to_numpy() 
+                               for branch in ntuple.keys()}
+                    return pd.DataFrame(data_dict)
             
             # 3. Try histograms (convert bin contents to data)
-            hist_keys = [k for k in keys if hasattr(root_file[k], 'classname') and 
-                        root_file[k].classname in ['TH1F', 'TH1D', 'TH1I', 'TH2F', 'TH2D', 'TProfile']]
+            hist_types = ['TH1F', 'TH1D', 'TH1I', 'TH1C', 'TH1S',  # 1D histograms
+                         'TH2F', 'TH2D', 'TH2I', 'TH2C', 'TH2S',  # 2D histograms  
+                         'TH3F', 'TH3D', 'TH3I', 'TH3C', 'TH3S',  # 3D histograms
+                         'TProfile', 'TProfile2D', 'TProfile3D']   # Profile histograms
+            
+            hist_keys = [k for k, cls in classnames.items() if cls in hist_types]
             if hist_keys:
-                data_dicts = []
-                for hist_key in hist_keys:
-                    hist = root_file[hist_key]
-                    classname = hist.classname
-                    
-                    if classname in ['TH1F', 'TH1D', 'TH1I']:
-                        # 1D histogram
+                hist_key = hist_keys[0]  # Use first histogram
+                hist = root_file[hist_key]
+                classname = classnames[hist_key]
+                
+                # Use histogram's to_numpy() method when available (best practice)
+                try:
+                    if classname.startswith('TH1') or classname == 'TProfile':
+                        # 1D histogram or profile
+                        values, bin_edges = hist.to_numpy()
+                        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+                        return pd.DataFrame({
+                            'bin_center': bin_centers,
+                            'bin_content': values
+                        })
+                    elif classname.startswith('TH2') or classname == 'TProfile2D':
+                        # 2D histogram or profile
+                        values, x_edges, y_edges = hist.to_numpy()
+                        x_centers = (x_edges[:-1] + x_edges[1:]) / 2
+                        y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+                        
+                        # Create meshgrid and flatten for tabular format
+                        X, Y = np.meshgrid(x_centers, y_centers, indexing='ij')
+                        return pd.DataFrame({
+                            'x_center': X.flatten(),
+                            'y_center': Y.flatten(),
+                            'bin_content': values.flatten()
+                        })
+                    elif classname.startswith('TH3') or classname == 'TProfile3D':
+                        # 3D histogram - flatten to tabular format (limit size for memory)
+                        values, x_edges, y_edges, z_edges = hist.to_numpy()
+                        
+                        # Check if result would be too large
+                        total_bins = len(x_edges) * len(y_edges) * len(z_edges)
+                        if total_bins > 100000:
+                            raise ValueError(f"3D histogram too large ({total_bins} bins)")
+                            
+                        x_centers = (x_edges[:-1] + x_edges[1:]) / 2
+                        y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+                        z_centers = (z_edges[:-1] + z_edges[1:]) / 2
+                        
+                        X, Y, Z = np.meshgrid(x_centers, y_centers, z_centers, indexing='ij')
+                        return pd.DataFrame({
+                            'x_center': X.flatten(),
+                            'y_center': Y.flatten(), 
+                            'z_center': Z.flatten(),
+                            'bin_content': values.flatten()
+                        })
+                except Exception:
+                    # Fallback to older methods for histograms
+                    if classname in ['TH1F', 'TH1D', 'TH1I', 'TH1C', 'TH1S']:
                         values = hist.values()
                         edges = hist.axis().edges()
                         centers = (edges[:-1] + edges[1:]) / 2
-                        data_dicts.append({
-                            f'{hist_key}_bin_center': centers,
-                            f'{hist_key}_bin_content': values
+                        return pd.DataFrame({
+                            'bin_center': centers,
+                            'bin_content': values
                         })
-                    elif classname in ['TH2F', 'TH2D']:
-                        # 2D histogram - flatten to points
+                    elif classname in ['TH2F', 'TH2D', 'TH2I', 'TH2C', 'TH2S']:
                         values = hist.values()
                         x_edges = hist.axis(0).edges()
                         y_edges = hist.axis(1).edges()
                         x_centers = (x_edges[:-1] + x_edges[1:]) / 2
                         y_centers = (y_edges[:-1] + y_edges[1:]) / 2
                         
-                        # Create meshgrid and flatten
                         X, Y = np.meshgrid(x_centers, y_centers, indexing='ij')
-                        data_dicts.append({
-                            f'{hist_key}_x': X.flatten(),
-                            f'{hist_key}_y': Y.flatten(),
-                            f'{hist_key}_z': values.flatten()
+                        return pd.DataFrame({
+                            'x_center': X.flatten(),
+                            'y_center': Y.flatten(),
+                            'bin_content': values.flatten()
                         })
-                    elif classname == 'TProfile':
-                        # Profile histogram
-                        values = hist.values()
-                        edges = hist.axis().edges()
-                        centers = (edges[:-1] + edges[1:]) / 2
-                        data_dicts.append({
-                            f'{hist_key}_bin_center': centers,
-                            f'{hist_key}_profile_value': values
-                        })
-                
-                # Combine all histogram data
-                if data_dicts:
-                    # If only one histogram, use it directly
-                    if len(data_dicts) == 1:
-                        return pd.DataFrame(data_dicts[0])
-                    
-                    # If multiple histograms, try to combine them
-                    # For now, just use the first one
-                    return pd.DataFrame(data_dicts[0])
             
-            raise ValueError(f"No supported ROOT objects found. Available objects: {keys}")
+            # 4. Try TGraph objects (if present)
+            graph_types = ['TGraph', 'TGraphErrors', 'TGraphAsymmErrors']
+            graph_keys = [k for k, cls in classnames.items() if cls in graph_types]
+            if graph_keys:
+                graph_key = graph_keys[0]
+                graph = root_file[graph_key]
+                
+                # Extract graph data
+                try:
+                    x_values = graph.values(axis="x")
+                    y_values = graph.values(axis="y")
+                    data = {'x': x_values, 'y': y_values}
+                    
+                    # Add errors if available
+                    if classnames[graph_key] in ['TGraphErrors', 'TGraphAsymmErrors']:
+                        try:
+                            x_errors = graph.errors(axis="x")
+                            y_errors = graph.errors(axis="y")
+                            if x_errors is not None:
+                                data['x_error'] = x_errors
+                            if y_errors is not None:
+                                data['y_error'] = y_errors
+                        except:
+                            pass  # Errors not available
+                            
+                    return pd.DataFrame(data)
+                except Exception as e:
+                    raise ValueError(f"Could not read TGraph '{graph_key}': {str(e)}")
+            
+            # Generate helpful error message
+            available_objects = []
+            for k, cls in classnames.items():
+                available_objects.append(f"{k} ({cls})")
+            
+            raise ValueError(f"No supported ROOT objects found. Available objects: {', '.join(available_objects)}")
     
     async def _validate_dataframe(self, df: pd.DataFrame, job_id: str):
         """Validate dataframe quality and detect issues."""
