@@ -458,7 +458,7 @@ Provide rigorous theoretical foundation that other specialists can build upon.""
         self._log_step_execution(
             "theoretical_analysis", 
             "Senior Physics Expert", 
-            coordination_plan, 
+            data_processing_result, 
             result.raw, 
             execution_time
         )
