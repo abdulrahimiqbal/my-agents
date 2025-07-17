@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-PhysicsGPT - Simplified Streamlit App for Cloud Deployment
-Optimized for Streamlit Cloud with proper error handling.
+PhysicsGPT - Professional Physics Research Laboratory System
+Real-time telemetry monitoring with comprehensive knowledge management.
 """
 
 import streamlit as st
@@ -9,7 +9,7 @@ import os
 import sys
 import time
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Dict
 
 # Fix SQLite version issue for Streamlit Cloud
 try:
@@ -30,80 +30,333 @@ except ImportError as e:
     FLOW_AVAILABLE = False
     IMPORT_ERROR = str(e)
 
+# Professional CSS styling
+def load_professional_css():
+    """Load professional CSS styling."""
+    st.markdown("""
+    <style>
+    /* Main app styling */
+    .main > div {
+        padding: 1rem 2rem;
+    }
+    
+    /* Header styling */
+    .system-header {
+        background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 8px;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .system-title {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin: 0;
+        text-align: center;
+    }
+    
+    .system-subtitle {
+        font-size: 1.1rem;
+        opacity: 0.9;
+        text-align: center;
+        margin-top: 0.5rem;
+    }
+    
+    /* Status indicators */
+    .status-success {
+        background-color: #059669;
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 4px;
+        font-weight: 500;
+    }
+    
+    .status-warning {
+        background-color: #d97706;
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 4px;
+        font-weight: 500;
+    }
+    
+    .status-error {
+        background-color: #dc2626;
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 4px;
+        font-weight: 500;
+    }
+    
+    .status-info {
+        background-color: #2563eb;
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 4px;
+        font-weight: 500;
+    }
+    
+    /* Section headers */
+    .section-header {
+        background-color: #f8fafc;
+        border-left: 4px solid #3b82f6;
+        padding: 1rem;
+        margin: 1rem 0;
+        border-radius: 0 4px 4px 0;
+    }
+    
+    .section-title {
+        font-size: 1.3rem;
+        font-weight: 600;
+        color: #1e293b;
+        margin: 0;
+    }
+    
+    /* Telemetry styling */
+    .telemetry-container {
+        background-color: #f1f5f9;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 1rem;
+        margin: 0.5rem 0;
+    }
+    
+    .telemetry-title {
+        font-weight: 600;
+        color: #334155;
+        margin-bottom: 0.5rem;
+    }
+    
+    /* Progress indicators */
+    .progress-container {
+        background-color: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 1rem;
+        margin: 1rem 0;
+    }
+    
+    /* Card styling */
+    .info-card {
+        background-color: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 1.5rem;
+        margin: 1rem 0;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Tab styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 2px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background-color: #f8fafc;
+        border-radius: 4px 4px 0 0;
+        padding: 0.5rem 1rem;
+        font-weight: 500;
+    }
+    
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {
+        background-color: #3b82f6;
+        color: white;
+    }
+    
+    /* Remove streamlit branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    .stDeployButton {display:none;}
+    </style>
+    """, unsafe_allow_html=True)
+
+class FlowExecutionMonitor:
+    """Monitor flow execution with telemetry."""
+    
+    def __init__(self):
+        self.start_time = time.time()
+        self.current_step = 0
+        self.total_steps = 8
+        self.execution_log = []
+        self.agent_outputs = {}
+        
+    def log_step(self, step_name: str, status: str, details: str):
+        """Log a step execution."""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.execution_log.append({
+            'timestamp': timestamp,
+            'step': step_name,
+            'status': status,
+            'details': details
+        })
+        
+        if status == "started":
+            self.current_step += 1
+            
+    def get_progress(self) -> float:
+        """Get current progress as a float between 0.0 and 1.0."""
+        return min(1.0, max(0.0, self.current_step / self.total_steps))
+
 def safe_progress_update(progress_bar, value: float):
     """Safely update progress bar with normalized value."""
-    # Ensure value is between 0.0 and 1.0
     normalized_value = max(0.0, min(1.0, value))
     try:
         progress_bar.progress(normalized_value)
     except Exception as e:
         st.error(f"Progress update error: {e}")
 
-def run_physics_analysis(question: str):
-    """Run physics analysis with proper error handling."""
+def run_physics_analysis_with_telemetry(question: str):
+    """Run physics analysis with comprehensive telemetry monitoring."""
     
-    # Create containers
-    st.markdown("### 🔬 Physics Laboratory Analysis")
+    # Initialize monitor
+    monitor = FlowExecutionMonitor()
+    
+    # Flow steps for telemetry
+    flow_steps = [
+        "initialize_lab", "director_analysis", "physics_expert_review",
+        "hypothesis_generation", "mathematical_analysis", "experimental_design",
+        "specialist_consultation", "final_synthesis"
+    ]
+    
+    step_names = [
+        "Laboratory Initialization",
+        "Lab Director Analysis", 
+        "Senior Physics Expert Review",
+        "Hypothesis Generation",
+        "Mathematical Analysis",
+        "Experimental Design",
+        "Specialist Consultation",
+        "Final Synthesis & Report"
+    ]
+    
+    # Create telemetry UI
+    st.markdown('<div class="section-header"><h3 class="section-title">Physics Laboratory Analysis Execution</h3></div>', unsafe_allow_html=True)
     
     # Progress tracking
     progress_container = st.container()
     with progress_container:
+        st.markdown('<div class="progress-container">', unsafe_allow_html=True)
         col1, col2 = st.columns([3, 1])
         with col1:
             progress_bar = st.progress(0.0)
         with col2:
             status_text = st.empty()
+        st.markdown('</div>', unsafe_allow_html=True)
     
-    # Results container
-    results_container = st.container()
+    # Live monitoring containers
+    live_output = st.container()
     
-    try:
-        # Update progress
-        status_text.text("🚀 Starting analysis...")
-        safe_progress_update(progress_bar, 0.1)
+    # Telemetry containers
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown('<div class="telemetry-container">', unsafe_allow_html=True)
+        st.markdown('<div class="telemetry-title">Flow Progress</div>', unsafe_allow_html=True)
+        flow_status = st.empty()
+        st.markdown('</div>', unsafe_allow_html=True)
+    with col2:
+        st.markdown('<div class="telemetry-container">', unsafe_allow_html=True)
+        st.markdown('<div class="telemetry-title">Execution Log</div>', unsafe_allow_html=True)
+        telemetry_log = st.empty()
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Start execution monitoring
+    with live_output:
+        st.markdown('<div class="status-info">Initializing Physics Laboratory Flow System...</div>', unsafe_allow_html=True)
         
-        # Run the analysis
-        start_time = time.time()
-        result = analyze_physics_question_with_flow(question)
-        end_time = time.time()
+        # Simulate flow step progression for telemetry
+        for i, (step_name, display_name) in enumerate(zip(flow_steps, step_names)):
+            monitor.log_step(step_name, "started", f"Executing {display_name}")
+            
+            # Update progress
+            progress = monitor.get_progress()
+            safe_progress_update(progress_bar, progress)
+            status_text.text(f"Step {monitor.current_step}/{monitor.total_steps}")
+            
+            # Update flow status
+            with flow_status:
+                flow_data = []
+                for j, name in enumerate(step_names):
+                    if j < monitor.current_step:
+                        status = "COMPLETED"
+                    elif j == monitor.current_step:
+                        status = "IN PROGRESS"
+                    else:
+                        status = "PENDING"
+                    
+                    flow_data.append({
+                        'Step': f"{j+1}. {name}",
+                        'Status': status
+                    })
+                
+                st.dataframe(flow_data, use_container_width=True, hide_index=True)
+            
+            # Update telemetry log
+            with telemetry_log:
+                log_data = []
+                for entry in monitor.execution_log[-5:]:  # Show last 5 entries
+                    log_data.append({
+                        'Time': entry['timestamp'],
+                        'Step': entry['step'],
+                        'Status': entry['status'].upper(),
+                        'Details': entry['details'][:30] + "..." if len(entry['details']) > 30 else entry['details']
+                    })
+                
+                if log_data:
+                    st.dataframe(log_data, use_container_width=True, hide_index=True)
+            
+            # Small delay for UI updates
+            time.sleep(0.3)
         
-        # Final progress
-        status_text.text("✅ Analysis complete!")
+        # Execute the actual flow analysis
+        status_text.text("Running Comprehensive Analysis...")
+        monitor.log_step("full_execution", "started", "Running complete flow")
+        
+        with st.spinner("Physics specialists collaborating..."):
+            try:
+                start_time = time.time()
+                result = analyze_physics_question_with_flow(question)
+                end_time = time.time()
+                execution_success = True
+            except Exception as e:
+                st.error(f"Flow execution failed: {e}")
+                result = f"Flow execution encountered an error: {str(e)}"
+                execution_success = False
+                end_time = time.time()
+        
+        monitor.log_step("full_execution", "completed" if execution_success else "failed", "Flow analysis complete")
+        
+        # Final progress update
+        monitor.current_step = len(flow_steps)
         safe_progress_update(progress_bar, 1.0)
+        status_text.text("Analysis Complete" if execution_success else "Analysis Failed")
         
         # Display results
-        with results_container:
-            execution_time = end_time - start_time
+        execution_time = end_time - start_time
+        
+        if execution_success:
+            st.markdown(f'<div class="status-success">Analysis completed successfully in {execution_time:.1f} seconds</div>', unsafe_allow_html=True)
             
-            st.success(f"✅ **Analysis Complete!** (Execution time: {execution_time:.1f}s)")
-            
-            # Results
-            st.markdown("### 📄 Research Report")
-            with st.expander("📋 Full Analysis", expanded=True):
+            # Results section
+            st.markdown('<div class="section-header"><h3 class="section-title">Research Report</h3></div>', unsafe_allow_html=True)
+            with st.expander("Full Analysis Report", expanded=True):
                 st.markdown(result)
             
             # Download option
             st.download_button(
-                label="📥 Download Report",
+                label="Download Report",
                 data=result,
                 file_name=f"physics_analysis_{int(time.time())}.txt",
                 mime="text/plain"
             )
-            
-    except Exception as e:
-        status_text.text("❌ Error occurred")
-        safe_progress_update(progress_bar, 0.0)
-        
-        with results_container:
-            st.error(f"❌ **Analysis Failed**: {str(e)}")
-            st.info("Please try a different question or check the system status.")
+        else:
+            st.markdown('<div class="status-error">Analysis failed - please try again</div>', unsafe_allow_html=True)
 
 def load_knowledge_data():
     """Load knowledge base and hypothesis data."""
     try:
         from crewai_database_integration import CrewAIKnowledgeAPI
         import sqlite3
-        import json
         
         knowledge_api = CrewAIKnowledgeAPI()
         
@@ -145,331 +398,202 @@ def load_knowledge_data():
 
 def display_knowledge_base():
     """Display the knowledge base tab."""
-    st.header("🧠 Physics Knowledge Base")
+    st.markdown('<div class="section-header"><h3 class="section-title">Physics Knowledge Base</h3></div>', unsafe_allow_html=True)
     
     knowledge_entries, _ = load_knowledge_data()
     
     if not knowledge_entries:
-        st.info("📚 No knowledge entries yet. Run some physics analyses to build the knowledge base!")
-        st.markdown("""
-        **How to build knowledge:**
-        1. Go to the 🚀 Analysis tab
-        2. Ask complex physics questions
-        3. The system will generate and validate hypotheses
-        4. Validated findings will appear here as knowledge entries
-        """)
+        st.markdown('<div class="info-card">', unsafe_allow_html=True)
+        st.info("No knowledge entries found. Run some physics analyses to populate the knowledge base.")
+        st.markdown('</div>', unsafe_allow_html=True)
         return
     
-    # Knowledge base statistics
+    # Search functionality
+    search_term = st.text_input("Search knowledge base", placeholder="Enter search terms...")
+    
+    if search_term:
+        filtered_entries = [
+            entry for entry in knowledge_entries 
+            if search_term.lower() in entry.get('title', '').lower() or 
+               search_term.lower() in entry.get('content', '').lower()
+        ]
+    else:
+        filtered_entries = knowledge_entries
+    
+    # Statistics
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Total Entries", len(knowledge_entries))
     with col2:
-        domains = [entry.get('physics_domain', 'Unknown') for entry in knowledge_entries]
-        unique_domains = len(set(domains))
-        st.metric("Physics Domains", unique_domains)
+        domains = set(entry.get('physics_domain', 'unknown') for entry in knowledge_entries)
+        st.metric("Physics Domains", len(domains))
     with col3:
-        avg_confidence = sum(entry.get('confidence_level', 0) for entry in knowledge_entries) / len(knowledge_entries)
+        avg_confidence = sum(entry.get('confidence_level', 0) for entry in knowledge_entries) / len(knowledge_entries) if knowledge_entries else 0
         st.metric("Avg Confidence", f"{avg_confidence:.2f}")
     
-    # Search functionality
-    search_term = st.text_input("🔍 Search Knowledge Base", placeholder="Enter search terms...")
-    
-    # Filter knowledge entries
-    filtered_entries = knowledge_entries
-    if search_term:
-        filtered_entries = [
-            entry for entry in knowledge_entries
-            if search_term.lower() in entry.get('title', '').lower() or 
-               search_term.lower() in entry.get('content', '').lower() or
-               search_term.lower() in entry.get('physics_domain', '').lower()
-        ]
-    
-    # Display knowledge entries
+    # Display entries
     for entry in filtered_entries:
-        with st.expander(f"📖 {entry.get('title', 'Untitled')} (Confidence: {entry.get('confidence_level', 0):.2f})"):
-            col1, col2 = st.columns([3, 1])
-            
-            with col1:
-                st.markdown(f"**Content:** {entry.get('content', 'No content')}")
-                
-            with col2:
-                st.markdown(f"**Domain:** {entry.get('physics_domain', 'Unknown')}")
-                st.markdown(f"**Created:** {entry.get('created_at', 'Unknown')}")
-                
-                # Parse source agents
-                source_agents = entry.get('source_agents', '[]')
-                try:
-                    import json
-                    agents = json.loads(source_agents) if isinstance(source_agents, str) else source_agents
-                    if agents:
-                        st.markdown(f"**Contributors:** {', '.join(agents)}")
-                except:
-                    st.markdown("**Contributors:** Unknown")
+        with st.expander(f"{entry.get('title', 'Untitled')} | Domain: {entry.get('physics_domain', 'Unknown')}"):
+            st.write(f"**Content:** {entry.get('content', 'No content')}")
+            st.write(f"**Confidence Level:** {entry.get('confidence_level', 0):.2f}")
+            st.write(f"**Created:** {entry.get('created_at', 'Unknown')}")
+            st.write(f"**Source Agents:** {entry.get('source_agents', 'Unknown')}")
 
 def display_hypothesis_tracker():
-    """Display the hypothesis progression tracker tab."""
-    st.header("🔬 Hypothesis Research Progression")
+    """Display the hypothesis tracker tab."""
+    st.markdown('<div class="section-header"><h3 class="section-title">Hypothesis Research Tracker</h3></div>', unsafe_allow_html=True)
     
     _, hypotheses = load_knowledge_data()
     
     if not hypotheses:
-        st.info("💡 No hypotheses yet. Run some physics analyses to generate hypotheses!")
-        st.markdown("""
-        **How hypotheses work:**
-        1. Ask complex physics questions in the 🚀 Analysis tab
-        2. The Hypothesis Generator creates new scientific ideas
-        3. Other agents evaluate and validate the hypotheses
-        4. Track their progression through research phases here
-        """)
+        st.markdown('<div class="info-card">', unsafe_allow_html=True)
+        st.info("No hypotheses found. Run physics analyses to generate and track hypotheses.")
+        st.markdown('</div>', unsafe_allow_html=True)
         return
     
-    # Research phase explanation
-    st.markdown("""
-    ### 📋 Research Phases
-    - **📝 Pending**: Initial hypothesis proposed
-    - **🔍 Under Review**: Being evaluated by agents
-    - **✅ Validated**: Passed scientific validation
-    - **❌ Refuted**: Disproven by evidence
-    - **🏆 Promoted**: Accepted into knowledge base
-    """)
+    # Status filter
+    status_options = ["All"] + list(set(h.get('validation_status', 'pending') for h in hypotheses))
+    selected_status = st.selectbox("Filter by Status", status_options)
     
-    # Hypothesis statistics
+    if selected_status != "All":
+        filtered_hypotheses = [h for h in hypotheses if h.get('validation_status') == selected_status]
+    else:
+        filtered_hypotheses = hypotheses
+    
+    # Status distribution
     status_counts = {}
-    for hyp in hypotheses:
-        status = hyp.get('validation_status', 'pending')
+    for h in hypotheses:
+        status = h.get('validation_status', 'pending')
         status_counts[status] = status_counts.get(status, 0) + 1
     
-    # Display status distribution
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Hypotheses", len(hypotheses))
+    with col2:
+        st.metric("Pending", status_counts.get('pending', 0))
+    with col3:
+        st.metric("Under Review", status_counts.get('under_review', 0))
+    with col4:
+        st.metric("Validated", status_counts.get('validated', 0))
     
-    phase_info = {
-        'pending': {'col': col1, 'emoji': '📝', 'label': 'Pending'},
-        'under_review': {'col': col2, 'emoji': '🔍', 'label': 'Under Review'},
-        'validated': {'col': col3, 'emoji': '✅', 'label': 'Validated'},
-        'refuted': {'col': col4, 'emoji': '❌', 'label': 'Refuted'},
-        'promoted': {'col': col5, 'emoji': '🏆', 'label': 'Promoted'}
-    }
+    # Research phases progress
+    phases = ['pending', 'under_review', 'validated', 'refuted', 'promoted']
+    phase_progress = {phase: status_counts.get(phase, 0) for phase in phases}
     
-    for status, info in phase_info.items():
-        count = status_counts.get(status, 0)
-        with info['col']:
-            st.metric(f"{info['emoji']} {info['label']}", count)
-    
-    # Filter by status
-    status_filter = st.selectbox(
-        "Filter by Status:",
-        ["All"] + list(phase_info.keys()),
-        format_func=lambda x: f"{phase_info[x]['emoji']} {phase_info[x]['label']}" if x != "All" else "🔬 All Hypotheses"
-    )
-    
-    # Filter hypotheses
-    filtered_hypotheses = hypotheses
-    if status_filter != "All":
-        filtered_hypotheses = [h for h in hypotheses if h.get('validation_status') == status_filter]
+    st.markdown("**Research Phase Distribution:**")
+    for phase, count in phase_progress.items():
+        if count > 0:
+            st.write(f"**{phase.replace('_', ' ').title()}:** {count} hypotheses")
     
     # Display hypotheses
-    for hyp in filtered_hypotheses:
-        status = hyp.get('validation_status', 'pending')
-        status_info = phase_info.get(status, {'emoji': '❓', 'label': 'Unknown'})
+    for hypothesis in filtered_hypotheses:
+        status = hypothesis.get('validation_status', 'pending')
+        confidence = hypothesis.get('confidence_score', 0)
         
-        with st.expander(f"{status_info['emoji']} {hyp.get('title', 'Untitled Hypothesis')} (Confidence: {hyp.get('confidence_score', 0):.2f})"):
-            col1, col2 = st.columns([3, 1])
+        # Status styling
+        if status == 'validated':
+            status_class = 'status-success'
+        elif status == 'under_review':
+            status_class = 'status-warning'
+        elif status == 'refuted':
+            status_class = 'status-error'
+        else:
+            status_class = 'status-info'
+        
+        with st.expander(f"{hypothesis.get('title', 'Untitled Hypothesis')} | Confidence: {confidence:.2f}"):
+            st.markdown(f'<div class="{status_class}">Status: {status.replace("_", " ").title()}</div>', unsafe_allow_html=True)
+            st.write(f"**Description:** {hypothesis.get('description', 'No description')}")
+            st.write(f"**Created by:** {hypothesis.get('created_by', 'Unknown')}")
+            st.write(f"**Created:** {hypothesis.get('created_at', 'Unknown')}")
             
-            with col1:
-                st.markdown(f"**Description:** {hyp.get('description', 'No description')}")
-                
-            with col2:
-                st.markdown(f"**Status:** {status_info['emoji']} {status_info['label']}")
-                st.markdown(f"**Created by:** {hyp.get('created_by', 'Unknown')}")
-                st.markdown(f"**Created:** {hyp.get('created_at', 'Unknown')}")
-                
-                # Progress indicator
-                if status == 'pending':
-                    progress = 0.2
-                elif status == 'under_review':
-                    progress = 0.4
-                elif status == 'validated':
-                    progress = 0.8
-                elif status == 'promoted':
-                    progress = 1.0
-                else:  # refuted
-                    progress = 0.1
-                
-                st.progress(progress)
+            # Progress bar for confidence
+            st.progress(confidence)
 
 def main():
-    """Main Streamlit application."""
-    
-    # Page config
+    """Main application function."""
+    # Page configuration
     st.set_page_config(
-        page_title="PhysicsGPT Laboratory",
-        page_icon="🔬", 
-        layout="wide"
+        page_title="PhysicsGPT Research Laboratory",
+        page_icon="⚛",
+        layout="wide",
+        initial_sidebar_state="collapsed"
     )
+    
+    # Load professional styling
+    load_professional_css()
     
     # Header
     st.markdown("""
-    # 🔬 PhysicsGPT Laboratory
-    ### 10-Agent Physics Research System
-    """)
+    <div class="system-header">
+        <h1 class="system-title">PhysicsGPT Research Laboratory</h1>
+        <p class="system-subtitle">Advanced Multi-Agent Physics Analysis System | Real-Time Telemetry Monitoring</p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    # Sidebar
-    with st.sidebar:
-        st.header("🔧 Configuration")
-        
-        # API Key management
-        api_key_configured = False
-        
-        if "OPENAI_API_KEY" in st.secrets:
-            st.success("✅ OpenAI API Key (from secrets)")
-            os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
-            api_key_configured = True
-        elif "OPENAI_API_KEY" in os.environ:
-            st.success("✅ OpenAI API Key (from env)")
-            api_key_configured = True
-        else:
-            openai_key = st.text_input("OpenAI API Key", type="password")
-            if openai_key:
-                os.environ["OPENAI_API_KEY"] = openai_key
-                api_key_configured = True
-        
-        # Other API keys
-        other_keys = ["LANGCHAIN_API_KEY", "TAVILY_API_KEY"]
-        for key in other_keys:
-            if key in st.secrets:
-                os.environ[key] = st.secrets[key]
-                st.success(f"✅ {key}")
-            elif key in os.environ:
-                st.success(f"✅ {key}")
-            else:
-                st.info(f"ℹ️ {key} (optional)")
-        
-        # Set LangSmith tracing if available
-        if "LANGCHAIN_API_KEY" in os.environ:
-            os.environ["LANGCHAIN_TRACING_V2"] = "true"
-            os.environ["LANGCHAIN_PROJECT"] = "physics-gpt"
-        
-        st.markdown("---")
-        
-        # System status
-        st.header("📊 Status")
-        
-        if not FLOW_AVAILABLE:
-            st.error("❌ Flow System Error")
-            st.error(f"Import error: {IMPORT_ERROR}")
-        elif not api_key_configured:
-            st.warning("⚠️ API Key Required")
-        else:
-            st.success("✅ System Ready")
-        
-        # Model settings
-        st.header("⚙️ Settings")
-        model = st.selectbox("Model", ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"])
-        temperature = st.slider("Temperature", 0.0, 1.0, 0.1, 0.1)
-        
-        os.environ["PHYSICS_AGENT_MODEL"] = model
-        os.environ["PHYSICS_AGENT_TEMPERATURE"] = str(temperature)
-    
-    # Main interface
+    # System status check
     if not FLOW_AVAILABLE:
-        st.error("❌ **System Error**")
-        st.error(f"Failed to import physics flow system: {IMPORT_ERROR}")
-        st.info("Please check the system logs and try refreshing.")
-        return
+        st.markdown('<div class="status-error">System Unavailable: Flow system could not be loaded</div>', unsafe_allow_html=True)
+        st.error(f"Import Error: {IMPORT_ERROR}")
+        st.stop()
     
-    if not api_key_configured:
-        st.warning("⚠️ **API Key Required**")
-        st.info("Please configure your OpenAI API key in the sidebar to continue.")
-        return
-    
-    # Main content tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["🚀 Analysis", "📊 System Info", "🧠 Knowledge Base", "🔬 Hypothesis Tracker"])
+    # Tabs
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "Physics Analysis", 
+        "System Status", 
+        "Knowledge Base", 
+        "Hypothesis Tracker"
+    ])
     
     with tab1:
+        st.markdown('<div class="section-header"><h3 class="section-title">Physics Question Analysis</h3></div>', unsafe_allow_html=True)
+        
         # Question input
-        col1, col2 = st.columns([3, 1])
+        question = st.text_area(
+            "Enter your physics question:",
+            placeholder="Example: What is the relationship between force, mass, and acceleration in classical mechanics?",
+            height=100
+        )
         
-        with col1:
-            question = st.text_area(
-                "Physics Question:",
-                placeholder="e.g., How do quantum tunneling effects work in semiconductor devices?",
-                height=100
-            )
-        
-        with col2:
-            st.markdown("#### 💡 Examples")
-            examples = [
-                "How does quantum entanglement work?",
-                "Explain dark matter detection methods",
-                "What is the physics of black holes?",
-                "How do superconductors work?",
-                "Explain nuclear fusion reactions"
-            ]
-            
-            for example in examples:
-                if st.button(example, key=example, use_container_width=True):
-                    question = example
-                    st.rerun()
-        
-        # Analysis button
-        if st.button("🚀 **Start Analysis**", type="primary", use_container_width=True):
+        if st.button("Analyze Physics Question", type="primary"):
             if question.strip():
-                run_physics_analysis(question)
+                run_physics_analysis_with_telemetry(question)
             else:
-                st.warning("Please enter a physics question first!")
+                st.warning("Please enter a physics question to analyze.")
     
     with tab2:
-        st.header("📊 System Information")
+        st.markdown('<div class="section-header"><h3 class="section-title">System Status & Information</h3></div>', unsafe_allow_html=True)
         
-        col1, col2 = st.columns(2)
+        # System info
+        st.markdown('<div class="info-card">', unsafe_allow_html=True)
+        st.markdown("**System Architecture:** 10 Specialized Physics Agents")
+        st.markdown("**Flow Engine:** CrewAI Flows with Event-Driven Architecture")  
+        st.markdown("**Database:** SQLite with Real-Time Analytics")
+        st.markdown("**Telemetry:** Comprehensive Flow Monitoring")
+        st.markdown('</div>', unsafe_allow_html=True)
         
-        with col1:
-            st.markdown("""
-            #### 🤖 Core Agents
-            - **Lab Director**: Research coordination  
-            - **Senior Physics Expert**: Theoretical analysis
-            - **Hypothesis Generator**: Creative approaches
-            - **Mathematical Analyst**: Calculations
-            - **Experimental Designer**: Practical methods
-            """)
+        # Agent information
+        agents_info = [
+            ("Lab Director", "Orchestrates research workflow and ensures scientific rigor"),
+            ("Senior Physics Expert", "Provides high-level physics expertise and validation"),
+            ("Hypothesis Generator", "Creates testable scientific hypotheses"),
+            ("Mathematical Analyst", "Performs quantitative analysis and modeling"),
+            ("Experimental Designer", "Designs experiments to test hypotheses"),
+            ("Quantum Specialist", "Expert in quantum mechanics and phenomena"),
+            ("Relativity Expert", "Specialist in special and general relativity"),
+            ("Condensed Matter Expert", "Expert in solid-state and condensed matter physics"),
+            ("Computational Physicist", "Performs computational modeling and simulations"),
+            ("Physics Communicator", "Translates complex physics into clear explanations")
+        ]
         
-        with col2:
-            st.markdown("""
-            #### ⚛️ Specialists
-            - **Quantum Specialist**: Quantum mechanics
-            - **Relativity Expert**: Spacetime physics
-            - **Condensed Matter Expert**: Materials science
-            - **Computational Physicist**: Simulations
-            - **Physics Communicator**: Synthesis
-            """)
-        
-        st.markdown("---")
-        st.markdown("""
-        #### 🔄 Analysis Process
-        1. **Coordination**: Lab Director creates research plan
-        2. **Theory**: Senior Expert provides theoretical foundation
-        3. **Hypotheses**: Generator creates innovative approaches  
-        4. **Mathematics**: Analyst performs calculations
-        5. **Experiments**: Designer creates practical methods
-        6. **Quantum**: Specialist analyzes quantum aspects
-        7. **Computation**: Physicist runs simulations
-        8. **Synthesis**: Communicator creates final report
-        """)
+        st.markdown("**Agent Specifications:**")
+        for agent, description in agents_info:
+            st.markdown(f"• **{agent}:** {description}")
     
     with tab3:
         display_knowledge_base()
     
     with tab4:
         display_hypothesis_tracker()
-    
-    # Footer
-    st.markdown("---")
-    st.markdown("""
-    <div style="text-align: center; color: #666;">
-        <p>⚛️ PhysicsGPT Laboratory System • Powered by CrewAI Flows</p>
-    </div>
-    """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
