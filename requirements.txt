@@ -13,3 +13,11 @@ plotly
 pandas
 numpy
 requests
+
+# DataAgent dependencies
+python-magic
+pyarrow
+h5py
+openpyxl
+xlrd
+fastparquet

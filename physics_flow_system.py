@@ -7,6 +7,7 @@ Uses CrewAI Flows for proper orchestration with integrated database & evaluation
 import os
 import sys
 import time
+import asyncio
 from typing import Dict, Any, List
 from pydantic import BaseModel, Field
 
@@ -46,6 +47,12 @@ class PhysicsResearchState(BaseModel):
     materials_analysis: str = ""
     computational_simulations: str = ""
     final_synthesis: str = ""
+    
+    # DataAgent integration fields
+    data_jobs: List[str] = Field(default_factory=list)  # List of active data ingestion job IDs
+    data_insights: str = ""    # Extracted insights from data analysis
+    data_context: str = ""     # Context about uploaded data files
+    has_data: bool = False     # Flag indicating if data is available for analysis
 
 class PhysicsLabFlow(Flow[PhysicsResearchState]):
     """Modern Physics Laboratory Flow with 10 specialized agents and integrated evaluation."""
@@ -57,6 +64,21 @@ class PhysicsLabFlow(Flow[PhysicsResearchState]):
         self.knowledge_api = CrewAIKnowledgeAPI()
         self.evaluation_framework = CrewAIEvaluationFramework(self.knowledge_api)
         
+        # Initialize DataAgent
+        try:
+            from src.agents.data_agent import DataAgent
+            from src.agents.data_tools import set_data_agent_instance, DATA_AGENT_TOOLS, register_data_tools_with_agent
+            
+            self.data_agent = DataAgent()
+            set_data_agent_instance(self.data_agent)  # Set global instance for tools
+            self.data_tools = DATA_AGENT_TOOLS
+            self.data_available = True
+        except ImportError as e:
+            print(f"Warning: DataAgent not available: {e}")
+            self.data_agent = None
+            self.data_tools = []
+            self.data_available = False
+        
         # Initialize agents
         self._initialize_agents()
         
@@ -64,7 +86,7 @@ class PhysicsLabFlow(Flow[PhysicsResearchState]):
         self.knowledge_api.log_event(
             source="physics_lab_flow",
             event_type="system_initialized",
-            payload={"agents_count": 10, "flow_type": "sequential"}
+            payload={"agents_count": 11 if self.data_available else 10, "flow_type": "sequential", "data_agent_enabled": self.data_available}
         )
     
     def _initialize_agents(self):
@@ -203,6 +225,20 @@ class PhysicsLabFlow(Flow[PhysicsResearchState]):
             allow_delegation=False,
             llm=self.comm_llm
         )
+        
+        # Register data tools with all agents if DataAgent is available
+        if self.data_available:
+            all_agents = [
+                self.lab_director, self.physics_expert, self.hypothesis_generator,
+                self.mathematical_analyst, self.experimental_designer, self.quantum_specialist,
+                self.relativity_expert, self.condensed_matter_expert, self.computational_physicist,
+                self.physics_communicator
+            ]
+            
+            for agent in all_agents:
+                register_data_tools_with_agent(agent)
+            
+            print(f"✅ Registered data analysis tools with {len(all_agents)} physics agents")
 
     def _log_step_execution(self, step_name: str, agent_role: str, input_data: str, 
                            output_data: str, execution_time: float):
@@ -234,6 +270,16 @@ class PhysicsLabFlow(Flow[PhysicsResearchState]):
         start_time = time.time()
         print(f"🔬 Lab Director analyzing question: {self.state.question}")
         
+        # Check if data is available for analysis
+        data_context = ""
+        if self.state.has_data and self.state.data_context:
+            data_context = f"""
+
+AVAILABLE DATA CONTEXT:
+{self.state.data_context}
+
+Consider how this data can inform the physics analysis."""
+        
         task = Task(
             description=f"""As Lab Director, create a comprehensive research coordination plan for: '{self.state.question}'
 
@@ -242,6 +288,7 @@ Analyze the question and create a strategic plan that identifies:
 2. What specific analysis each specialist should focus on
 3. How their contributions will build toward a complete understanding
 4. The key physics domains that need to be addressed
+5. How to integrate available experimental data (if any) into the analysis{data_context}
 
 Available specialists:
 - Senior Physics Expert: Theoretical frameworks and fundamental principles
@@ -278,15 +325,105 @@ Create a clear coordination plan that will guide the specialists.""",
         return result.raw
 
     @listen(coordinate_research)
-    def theoretical_analysis(self, coordination_plan):
+    def process_uploaded_data(self, coordination_plan):
+        """DataAgent processes any uploaded data files for physics analysis."""
+        start_time = time.time()
+        
+        if not self.state.data_jobs or not self.data_available:
+            print("📊 No data files to process - proceeding with theoretical analysis")
+            self.state.data_insights = "No experimental data available"
+            self.state.data_context = "Analysis based on theoretical principles only"
+            return "No data files uploaded"
+        
+        print("📊 DataAgent processing uploaded data files...")
+        
+        try:
+            data_insights = []
+            data_contexts = []
+            
+            for job_id in self.state.data_jobs:
+                # Get data status and insights
+                status = asyncio.run(self.data_agent.status(job_id))
+                
+                if status.get("status") == "completed":
+                    # Get physics insights
+                    insights = self.data_agent.get_physics_insights(job_id)
+                    preview = asyncio.run(self.data_agent.preview(job_id, 5))
+                    
+                    # Build context
+                    context_info = f"""
+Data File: {status.get('file_path', 'Unknown')}
+Rows: {status.get('rows', 0)}, Columns: {status.get('columns', 0)}
+File Type: {status.get('mime_type', 'Unknown')}
+Physics Insights: {insights.get('physics_patterns', [])}
+Detected Units: {insights.get('unit_detection', {}).get('detected_units', {})}
+Data Type: {insights.get('data_type', 'experimental')}
+"""
+                    data_contexts.append(context_info)
+                    
+                    # Add insights
+                    insight_summary = f"Data from {status.get('file_path', 'file')}: {', '.join(insights.get('physics_patterns', ['Standard experimental data']))}"
+                    data_insights.append(insight_summary)
+                    
+                    # Publish data to lab memory
+                    try:
+                        publish_result = asyncio.run(self.data_agent.publish(job_id))
+                        print(f"📈 {publish_result}")
+                    except Exception as e:
+                        print(f"⚠️ Warning: Could not publish data: {e}")
+                
+                else:
+                    print(f"⚠️ Warning: Job {job_id} status: {status.get('status', 'unknown')}")
+            
+            # Update state with processed data
+            self.state.data_insights = "\n".join(data_insights) if data_insights else "Data processing completed"
+            self.state.data_context = "\n".join(data_contexts) if data_contexts else "Processed data available"
+            
+            execution_time = time.time() - start_time
+            
+            # Log execution
+            self._log_step_execution(
+                "process_uploaded_data",
+                "DataAgent", 
+                coordination_plan,
+                self.state.data_insights,
+                execution_time
+            )
+            
+            print("✅ Data processing complete")
+            return self.state.data_insights
+            
+        except Exception as e:
+            error_msg = f"Data processing failed: {str(e)}"
+            print(f"❌ {error_msg}")
+            self.state.data_insights = error_msg
+            self.state.data_context = "Data processing encountered errors"
+            return error_msg
+
+    @listen(process_uploaded_data)
+    def theoretical_analysis(self, data_processing_result):
         """Senior Physics Expert provides theoretical foundation."""
         start_time = time.time()
         print("🧠 Senior Physics Expert conducting theoretical analysis...")
         
+        # Include data context if available
+        data_analysis_context = ""
+        if self.state.has_data and self.state.data_insights:
+            data_analysis_context = f"""
+
+DATA ANALYSIS CONTEXT:
+{self.state.data_insights}
+
+DATA DETAILS:
+{self.state.data_context}
+
+Consider how this experimental data relates to the theoretical analysis."""
+        
         task = Task(
             description=f"""Based on the coordination plan, provide comprehensive theoretical analysis for: '{self.state.question}'
 
-Coordination Plan: {coordination_plan}
+Coordination Plan: {self.state.coordination_plan}
+Data Processing Result: {data_processing_result}{data_analysis_context}
 
 Focus on:
 1. Fundamental physics principles involved
@@ -294,6 +431,7 @@ Focus on:
 3. Key physics laws and concepts
 4. Theoretical predictions and implications
 5. Connection to established physics theory
+6. How experimental data (if available) supports or challenges theory
 
 Provide rigorous theoretical foundation that other specialists can build upon.""",
             expected_output="Comprehensive theoretical analysis with fundamental principles and frameworks",
