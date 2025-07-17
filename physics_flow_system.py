@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
 PhysicsGPT Flow - Modern 10-Agent Physics Laboratory System
-Uses CrewAI Flows for proper orchestration instead of broken hierarchical delegation.
+Uses CrewAI Flows for proper orchestration with integrated database & evaluation.
 """
 
 import os
 import sys
+import time
 from typing import Dict, Any, List
 from pydantic import BaseModel, Field
 
@@ -21,6 +22,13 @@ from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, Process
 from crewai.flow.flow import Flow, listen, start
 from langchain_openai import ChatOpenAI
+
+# Import our CrewAI-compatible database and evaluation framework
+from crewai_database_integration import (
+    CrewAIKnowledgeAPI, 
+    CrewAIEvaluationFramework,
+    TaskType
+)
 
 # Load environment variables
 load_dotenv()
@@ -40,11 +48,24 @@ class PhysicsResearchState(BaseModel):
     final_synthesis: str = ""
 
 class PhysicsLabFlow(Flow[PhysicsResearchState]):
-    """Modern Physics Laboratory Flow with 10 specialized agents."""
+    """Modern Physics Laboratory Flow with 10 specialized agents and integrated evaluation."""
     
     def __init__(self):
         super().__init__()
+        
+        # Initialize database and evaluation components
+        self.knowledge_api = CrewAIKnowledgeAPI()
+        self.evaluation_framework = CrewAIEvaluationFramework(self.knowledge_api)
+        
+        # Initialize agents
         self._initialize_agents()
+        
+        # Log initialization
+        self.knowledge_api.log_event(
+            source="physics_lab_flow",
+            event_type="system_initialized",
+            payload={"agents_count": 10, "flow_type": "sequential"}
+        )
     
     def _initialize_agents(self):
         """Initialize all 10 specialized physics agents."""
@@ -114,10 +135,10 @@ class PhysicsLabFlow(Flow[PhysicsResearchState]):
         # EXPERIMENTAL DESIGNER - The practical expert
         self.experimental_designer = Agent(
             role='Experimental Designer',
-            goal='Design feasible experiments and practical implementations',
-            backstory="""You are the lab's experimental physics specialist who designs practical experiments 
-            and implementation strategies. You provide detailed experimental design, feasibility analysis, 
-            and practical approaches to testing theoretical predictions.""",
+            goal='Design practical experiments and implementation strategies',
+            backstory="""You are the lab's experimental physicist who designs practical approaches to test theories 
+            and hypotheses. You focus on feasible experimental setups, especially those requiring minimal resources, 
+            while maintaining scientific rigor.""",
             verbose=True,
             allow_delegation=False,
             llm=self.specialist_llm
@@ -128,8 +149,8 @@ class PhysicsLabFlow(Flow[PhysicsResearchState]):
             role='Quantum Specialist',
             goal='Analyze quantum mechanical aspects and quantum technologies',
             backstory="""You are the lab's quantum mechanics expert specializing in quantum phenomena, 
-            quantum computing, and quantum technologies. You provide deep insights into quantum behavior, 
-            quantum field theory, and quantum applications.""",
+            quantum field theory, and quantum technologies. You provide deep insights into quantum effects 
+            and their implications for physics research.""",
             verbose=True,
             allow_delegation=False,
             llm=self.specialist_llm
@@ -139,9 +160,9 @@ class PhysicsLabFlow(Flow[PhysicsResearchState]):
         self.relativity_expert = Agent(
             role='Relativity Expert',
             goal='Analyze relativistic effects and cosmological implications',
-            backstory="""You are the lab's relativity and cosmology expert specializing in special relativity, 
-            general relativity, and cosmological phenomena. You provide insights into spacetime effects, 
-            gravitational physics, and cosmological implications.""",
+            backstory="""You are the lab's relativity specialist with expertise in special and general relativity, 
+            cosmology, and spacetime physics. You provide insights into relativistic effects and their implications 
+            for physics phenomena.""",
             verbose=True,
             allow_delegation=False,
             llm=self.specialist_llm
@@ -183,9 +204,34 @@ class PhysicsLabFlow(Flow[PhysicsResearchState]):
             llm=self.comm_llm
         )
 
+    def _log_step_execution(self, step_name: str, agent_role: str, input_data: str, 
+                           output_data: str, execution_time: float):
+        """Log individual step execution for evaluation."""
+        self.knowledge_api.log_event(
+            source=agent_role.lower().replace(' ', '_'),
+            event_type="step_executed",
+            payload={
+                "step_name": step_name,
+                "input_length": len(input_data),
+                "output_length": len(output_data),
+                "execution_time": execution_time,
+                "question": self.state.question
+            }
+        )
+        
+        # Update agent metrics
+        self.knowledge_api.update_agent_metrics(
+            agent_id=agent_role.lower().replace(' ', '_'),
+            task_type="physics_analysis",
+            execution_time=execution_time,
+            success=bool(output_data and len(output_data) > 50),
+            quality_score=min(1.0, len(output_data) / 1000)  # Simple quality heuristic
+        )
+
     @start()
     def coordinate_research(self):
         """Lab Director creates the research coordination plan."""
+        start_time = time.time()
         print(f"🔬 Lab Director analyzing question: {self.state.question}")
         
         task = Task(
@@ -216,13 +262,25 @@ Create a clear coordination plan that will guide the specialists.""",
         crew = Crew(agents=[self.lab_director], tasks=[task], process=Process.sequential, verbose=True)
         result = crew.kickoff()
         
+        execution_time = time.time() - start_time
         self.state.coordination_plan = result.raw
+        
+        # Log execution
+        self._log_step_execution(
+            "coordinate_research", 
+            "Lab Director", 
+            self.state.question, 
+            result.raw, 
+            execution_time
+        )
+        
         print("✅ Coordination plan created")
         return result.raw
 
     @listen(coordinate_research)
     def theoretical_analysis(self, coordination_plan):
         """Senior Physics Expert provides theoretical foundation."""
+        start_time = time.time()
         print("🧠 Senior Physics Expert conducting theoretical analysis...")
         
         task = Task(
@@ -245,42 +303,74 @@ Provide rigorous theoretical foundation that other specialists can build upon.""
         crew = Crew(agents=[self.physics_expert], tasks=[task], process=Process.sequential, verbose=True)
         result = crew.kickoff()
         
+        execution_time = time.time() - start_time
         self.state.theoretical_analysis = result.raw
+        
+        # Log execution
+        self._log_step_execution(
+            "theoretical_analysis", 
+            "Senior Physics Expert", 
+            coordination_plan, 
+            result.raw, 
+            execution_time
+        )
+        
         print("✅ Theoretical analysis complete")
         return result.raw
 
     @listen(theoretical_analysis)
     def generate_hypotheses(self, theoretical_analysis):
         """Hypothesis Generator creates novel approaches."""
+        start_time = time.time()
         print("💡 Hypothesis Generator developing creative approaches...")
         
         task = Task(
-            description=f"""Based on the theoretical analysis, generate creative hypotheses and novel approaches for: '{self.state.question}'
+            description=f"""Generate creative hypotheses and novel approaches for: '{self.state.question}'
 
-Theoretical Foundation: {theoretical_analysis}
+Building on theoretical foundation: {theoretical_analysis}
 
-Generate:
-1. Innovative hypotheses about the phenomenon
-2. Novel approaches that haven't been fully explored
-3. Creative solutions to challenges identified
-4. Alternative perspectives on the problem
-5. Unconventional but scientifically sound ideas
+Provide:
+1. Creative and innovative hypotheses
+2. Novel approaches to the problem
+3. Unconventional ideas that might be overlooked
+4. Speculative but scientifically grounded possibilities
+5. Alternative perspectives on the question
 
-Think outside the box while maintaining scientific rigor.""",
-            expected_output="Creative hypotheses and novel approaches with scientific justification",
+Balance creativity with scientific rigor.""",
+            expected_output="Creative hypotheses and innovative approaches with scientific basis",
             agent=self.hypothesis_generator
         )
         
         crew = Crew(agents=[self.hypothesis_generator], tasks=[task], process=Process.sequential, verbose=True)
         result = crew.kickoff()
         
+        execution_time = time.time() - start_time
         self.state.creative_hypotheses = result.raw
+        
+        # Log execution and record hypotheses
+        self._log_step_execution(
+            "generate_hypotheses", 
+            "Hypothesis Generator", 
+            theoretical_analysis, 
+            result.raw, 
+            execution_time
+        )
+        
+        # Record hypothesis in database
+        self.knowledge_api.record_hypothesis(
+            title=f"Creative approaches for: {self.state.question}",
+            description=result.raw[:500],
+            created_by="Hypothesis Generator",
+            confidence_score=0.7
+        )
+        
         print("✅ Creative hypotheses generated")
         return result.raw
 
     @listen(generate_hypotheses)
     def mathematical_modeling(self, hypotheses):
         """Mathematical Analyst performs calculations and modeling."""
+        start_time = time.time()
         print("📊 Mathematical Analyst working on calculations...")
         
         task = Task(
@@ -305,13 +395,25 @@ Focus on the mathematical foundations that support the physics.""",
         crew = Crew(agents=[self.mathematical_analyst], tasks=[task], process=Process.sequential, verbose=True)
         result = crew.kickoff()
         
+        execution_time = time.time() - start_time
         self.state.mathematical_models = result.raw
+        
+        # Log execution
+        self._log_step_execution(
+            "mathematical_modeling", 
+            "Mathematical Analyst", 
+            hypotheses, 
+            result.raw, 
+            execution_time
+        )
+        
         print("✅ Mathematical modeling complete")
         return result.raw
 
     @listen(mathematical_modeling)
     def experimental_design(self, math_models):
         """Experimental Designer creates practical approaches."""
+        start_time = time.time()
         print("⚗️ Experimental Designer developing practical methods...")
         
         task = Task(
@@ -337,13 +439,25 @@ Focus on feasible, practical approaches that could actually be implemented.""",
         crew = Crew(agents=[self.experimental_designer], tasks=[task], process=Process.sequential, verbose=True)
         result = crew.kickoff()
         
+        execution_time = time.time() - start_time
         self.state.experimental_design = result.raw
+        
+        # Log execution
+        self._log_step_execution(
+            "experimental_design", 
+            "Experimental Designer", 
+            math_models, 
+            result.raw, 
+            execution_time
+        )
+        
         print("✅ Experimental design complete")
         return result.raw
 
     @listen(experimental_design)
     def quantum_analysis(self, experimental_design):
         """Quantum Specialist analyzes quantum aspects."""
+        start_time = time.time()
         print("⚛️ Quantum Specialist analyzing quantum mechanical aspects...")
         
         task = Task(
@@ -368,13 +482,25 @@ Provide deep quantum mechanical insights.""",
         crew = Crew(agents=[self.quantum_specialist], tasks=[task], process=Process.sequential, verbose=True)
         result = crew.kickoff()
         
+        execution_time = time.time() - start_time
         self.state.quantum_analysis = result.raw
+        
+        # Log execution
+        self._log_step_execution(
+            "quantum_analysis", 
+            "Quantum Specialist", 
+            experimental_design, 
+            result.raw, 
+            execution_time
+        )
+        
         print("✅ Quantum analysis complete")
         return result.raw
 
     @listen(quantum_analysis)
     def computational_simulation(self, quantum_analysis):
         """Computational Physicist develops simulation strategies."""
+        start_time = time.time()
         print("💻 Computational Physicist designing simulations...")
         
         task = Task(
@@ -400,13 +526,25 @@ Focus on practical computational approaches.""",
         crew = Crew(agents=[self.computational_physicist], tasks=[task], process=Process.sequential, verbose=True)
         result = crew.kickoff()
         
+        execution_time = time.time() - start_time
         self.state.computational_simulations = result.raw
+        
+        # Log execution
+        self._log_step_execution(
+            "computational_simulation", 
+            "Computational Physicist", 
+            quantum_analysis, 
+            result.raw, 
+            execution_time
+        )
+        
         print("✅ Computational simulations designed")
         return result.raw
 
     @listen(computational_simulation)
     def synthesize_research(self, computational_work):
         """Physics Communicator synthesizes all specialist contributions."""
+        start_time = time.time()
         print("📋 Physics Communicator synthesizing final research...")
         
         task = Task(
@@ -451,13 +589,35 @@ This should be a masterpiece of collaborative physics research.""",
         crew = Crew(agents=[self.physics_communicator], tasks=[task], process=Process.sequential, verbose=True)
         result = crew.kickoff()
         
+        execution_time = time.time() - start_time
         self.state.final_synthesis = result.raw
+        
+        # Log execution
+        self._log_step_execution(
+            "synthesize_research", 
+            "Physics Communicator", 
+            computational_work, 
+            result.raw, 
+            execution_time
+        )
+        
+        # Add final result to knowledge base
+        self.knowledge_api.add_knowledge_entry(
+            title=f"Physics Laboratory Analysis: {self.state.question}",
+            content=result.raw,
+            physics_domain="multi_domain",
+            source_agents=["Lab Director", "Senior Physics Expert", "Hypothesis Generator", 
+                          "Mathematical Analyst", "Experimental Designer", "Quantum Specialist", 
+                          "Computational Physicist", "Physics Communicator"],
+            confidence_level=0.85
+        )
+        
         print("✅ Final synthesis complete")
         return result.raw
 
 def analyze_physics_question_with_flow(question: str) -> str:
     """
-    Analyze a physics question using the modern Flow-based laboratory system.
+    Analyze a physics question using the modern Flow-based laboratory system with evaluation.
     
     Args:
         question: The physics question to analyze
@@ -470,16 +630,52 @@ def analyze_physics_question_with_flow(question: str) -> str:
     print("=" * 80)
     print("🏛️  Physics Laboratory Flow Activated")
     print("👨‍🔬 Modern event-driven orchestration with 10 specialists")
+    print("📊 Integrated database & evaluation framework")
     print("⚛️  Full-spectrum physics analysis in progress...")
     print("=" * 80)
     
+    overall_start_time = time.time()
+    
     # Initialize and run the flow
     flow = PhysicsLabFlow()
+    
+    # Start evaluation session
+    session_id = f"session_{int(time.time())}"
+    flow.evaluation_framework.start_evaluation_session(session_id)
+    
+    # Execute the flow
     result = flow.kickoff(inputs={"question": question})
+    
+    overall_execution_time = time.time() - overall_start_time
+    
+    # Evaluate the overall execution
+    # Create a mock crew for evaluation (Flow doesn't directly expose crew)
+    mock_crew = type('MockCrew', (), {
+        'agents': [
+            type('Agent', (), {'role': 'Lab Director'})(),
+            type('Agent', (), {'role': 'Senior Physics Expert'})(),
+            type('Agent', (), {'role': 'Hypothesis Generator'})(),
+            type('Agent', (), {'role': 'Mathematical Analyst'})(),
+            type('Agent', (), {'role': 'Experimental Designer'})(),
+            type('Agent', (), {'role': 'Quantum Specialist'})(),
+            type('Agent', (), {'role': 'Computational Physicist'})(),
+            type('Agent', (), {'role': 'Physics Communicator'})()
+        ]
+    })()
+    
+    evaluation_result = flow.evaluation_framework.evaluate_crew_execution(
+        crew=mock_crew,
+        query=question,
+        result=result,
+        execution_time=overall_execution_time
+    )
     
     print("=" * 80)
     print("✅ Laboratory research complete!")
     print("📋 Analysis ready for review")
+    print(f"📊 Evaluation Score: {evaluation_result['quality_score']:.2f}")
+    print(f"⏱️  Total Execution Time: {overall_execution_time:.2f}s")
+    print(f"🤖 Agents Involved: {len(evaluation_result['agents_involved'])}")
     
     return result
 
@@ -490,6 +686,7 @@ def main():
     print("=" * 70)
     print("🔬 Modern Event-Driven Physics Lab Orchestration")
     print("👨‍🔬 Lab Director + 9 Specialized Researchers")
+    print("📊 Integrated Database & Evaluation Framework")
     print("")
     print("🧠 Senior Physics Expert (Theoretical Backbone)")
     print("💡 Hypothesis Generator (Creative Mind)")  
@@ -511,6 +708,20 @@ def main():
         print("📋 LABORATORY RESEARCH REPORT:")
         print("="*70)
         print(result)
+        
+        # Show evaluation metrics
+        print("\n" + "="*70)
+        print("📊 SYSTEM PERFORMANCE METRICS:")
+        print("="*70)
+        
+        # Get performance report
+        flow = PhysicsLabFlow()
+        report = flow.evaluation_framework.get_performance_report()
+        
+        print("📈 System Analytics:")
+        for key, value in report['system_analytics'].items():
+            print(f"  - {key}: {value}")
+            
     else:
         print("\n💡 Usage: python physics_flow_system.py 'your physics question'")
         print("💡 Example: python physics_flow_system.py 'how to detect dark matter with minimal stuff?'")
