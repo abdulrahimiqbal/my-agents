@@ -24,6 +24,19 @@ from crewai import Agent, Task, Crew, Process
 from crewai.flow.flow import Flow, listen, start
 from langchain_openai import ChatOpenAI
 
+# Import DataAgent components at top level
+try:
+    from src.agents.data_agent import DataAgent
+    from src.agents.data_tools import set_data_agent_instance, DATA_AGENT_TOOLS, register_data_tools_with_agent
+    DATA_AGENT_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: DataAgent not available: {e}")
+    DATA_AGENT_AVAILABLE = False
+    DataAgent = None
+    DATA_AGENT_TOOLS = []
+    def register_data_tools_with_agent(agent): pass
+    def set_data_agent_instance(agent): pass
+
 # Import our CrewAI-compatible database and evaluation framework
 from crewai_database_integration import (
     CrewAIKnowledgeAPI, 
@@ -65,16 +78,13 @@ class PhysicsLabFlow(Flow[PhysicsResearchState]):
         self.evaluation_framework = CrewAIEvaluationFramework(self.knowledge_api)
         
         # Initialize DataAgent
-        try:
-            from src.agents.data_agent import DataAgent
-            from src.agents.data_tools import set_data_agent_instance, DATA_AGENT_TOOLS, register_data_tools_with_agent
-            
+        if DATA_AGENT_AVAILABLE:
             self.data_agent = DataAgent()
             set_data_agent_instance(self.data_agent)  # Set global instance for tools
             self.data_tools = DATA_AGENT_TOOLS
             self.data_available = True
-        except ImportError as e:
-            print(f"Warning: DataAgent not available: {e}")
+        else:
+            print(f"Warning: DataAgent not available")
             self.data_agent = None
             self.data_tools = []
             self.data_available = False

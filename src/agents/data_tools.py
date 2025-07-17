@@ -360,4 +360,19 @@ Job ID: {job_id}
             return "Data files uploaded but not yet ready for analysis."
             
     except Exception as e:
-        return f"Error creating data context: {str(e)}" 
+        return f"Error creating data context: {str(e)}"
+
+
+# Export all public functions and objects
+__all__ = [
+    'DATA_AGENT_TOOLS',
+    'set_data_agent_instance',
+    'get_data_agent_instance',
+    'register_data_tools_with_agent',
+    'get_data_status',
+    'preview_data',
+    'get_physics_insights', 
+    'publish_data_to_lab',
+    'list_available_data',
+    'get_data_context_for_agents'
+] 
